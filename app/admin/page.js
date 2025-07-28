@@ -15,6 +15,8 @@ export default function AdminPage() {
   const [leaderboardLimit, setLeaderboardLimit] = useState(10);
   const [leaderboardType, setLeaderboardType] = useState('full');
   const [selectedRound, setSelectedRound] = useState(1);
+  const [roundProgressData, setRoundProgressData] = useState(null);
+  const [autoTransitionEnabled, setAutoTransitionEnabled] = useState(false);
 
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -315,7 +317,7 @@ export default function AdminPage() {
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
-              {['dashboard', 'quizzes', 'leaderboard', 'users'].map((tab) => (
+              {['dashboard', 'quizzes', 'leaderboard', 'progress', 'users'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
