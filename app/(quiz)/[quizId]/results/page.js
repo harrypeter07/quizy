@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
 import { useParams, useRouter } from 'next/navigation';
+import LoadingSpinner from '../../../components/LoadingSpinner';
 
 export default function QuizResultsPage() {
   const { quizId } = useParams();
@@ -29,7 +30,7 @@ export default function QuizResultsPage() {
   }, [leaderboard, userId]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading results...</div>;
+    return <LoadingSpinner message="Loading results..." />;
   }
 
   return (

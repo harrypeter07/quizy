@@ -1,7 +1,7 @@
-import clientPromise from '@lib/db';
+import clientPromise from '../../../../../lib/db.js';
 
 export async function GET(req, { params }) {
-  const { quizId } = params;
+  const { quizId } = await params;
   try {
     const client = await clientPromise;
     const db = client.db();

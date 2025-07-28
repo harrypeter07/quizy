@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Cookies from 'js-cookie';
 import { useParams, useRouter } from 'next/navigation';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 const QUESTION_TIME = 15; // seconds
 
@@ -85,13 +86,13 @@ export default function QuizPage() {
       if (current < questions.length - 1) {
         setCurrent(c => c + 1);
       } else {
-        router.replace(`/quiz/${quizId}/results`);
+        router.replace(`/(quiz)/${quizId}/results`);
       }
     }, 1200);
   };
 
   if (!questions.length) {
-    return <div className="min-h-screen flex items-center justify-center">Loading questions...</div>;
+    return <LoadingSpinner message="Loading questions..." />;
   }
 
   const q = questions[current];
