@@ -1,4 +1,4 @@
-import clientPromise from '../../../../lib/db';
+import clientPromise from '@lib/db';
 import { z } from 'zod';
 
 const submissionSchema = z.object({

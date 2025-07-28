@@ -1,5 +1,5 @@
-import clientPromise from '../../../../../../lib/db';
-import { calculateScore } from '../../../../../../../lib/scoring';
+import clientPromise from '@lib/db';
+import { calculateScore } from '@lib/scoring';
 import { z } from 'zod';
 
 const adminToken = process.env.ADMIN_TOKEN;
