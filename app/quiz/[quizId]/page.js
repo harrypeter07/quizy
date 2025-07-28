@@ -148,6 +148,16 @@ export default function QuizPage() {
     // Submit answer immediately
     await submitAnswer(answerData);
     
+    // Trigger auto transition check after answer submission
+    try {
+      await fetch(`/api/quiz/${quizId}/auto-transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      console.error('Auto transition check failed:', error);
+    }
+    
     setTimeout(() => {
       setSubmitting(false);
       

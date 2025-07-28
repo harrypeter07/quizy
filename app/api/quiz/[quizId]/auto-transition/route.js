@@ -1,9 +1,16 @@
 import clientPromise from '@/lib/db.js';
 import { getQuizInfo, getQuestionsForRound } from '@/lib/questions.js';
+import { z } from 'zod';
 
 export async function POST(req, { params }) {
   try {
-    const { quizId } = params;
+    const quizIdSchema = z.object({ quizId: z.string().min(1) });
+    const awaitedParams = await params;
+    const parseResult = quizIdSchema.safeParse(awaitedParams);
+    if (!parseResult.success) {
+      return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
+    }
+    const { quizId } = awaitedParams;
     const client = await clientPromise;
     const db = client.db();
     

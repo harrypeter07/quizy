@@ -34,6 +34,17 @@ export default function AdminPage() {
     }
   }, [selectedQuiz, isAuthenticated]);
 
+  // Auto transition check interval
+  useEffect(() => {
+    if (!isAuthenticated || !autoTransitionEnabled) return;
+    
+    const interval = setInterval(() => {
+      handleAutoTransition();
+    }, 10000); // Check every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, autoTransitionEnabled, selectedQuiz]);
+
   const handleLogin = async () => {
     if (!adminToken.trim()) {
       setStatus('Please enter admin token');
@@ -233,6 +244,60 @@ export default function AdminPage() {
     setStatus('Leaderboard exported successfully!');
   };
 
+  const fetchRoundProgress = async (round = selectedRound) => {
+    setLoading(true);
+    setStatus('Loading round progress...');
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress?round=${round}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setRoundProgressData(data);
+        setStatus(`Round ${round} progress loaded`);
+      } else {
+        const errorData = await res.json();
+        setStatus(`Failed to load progress: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error loading round progress');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoTransition = async () => {
+    setLoading(true);
+    setStatus('Checking auto transition...');
+    
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/auto-transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.action) {
+          setStatus(`Auto transition: ${data.action}. ${data.nextRound ? `Advanced to round ${data.nextRound}` : 'Round paused'}`);
+          await fetchRoundStatus(); // Refresh round status
+          await fetchDashboardData(adminToken); // Refresh dashboard
+        } else {
+          setStatus('No auto transition needed');
+        }
+      } else {
+        const errorData = await res.json();
+        setStatus(`Auto transition failed: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error during auto transition');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setAdminToken('');
@@ -426,7 +491,7 @@ export default function AdminPage() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <button
                     onClick={() => handleQuizAction('start')}
                     className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -445,6 +510,42 @@ export default function AdminPage() {
                   >
                     Evaluate Quiz
                   </button>
+                  <button
+                    onClick={handleAutoTransition}
+                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                  >
+                    Check Auto Transition
+                  </button>
+                </div>
+
+                {/* Auto Transition Toggle */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-yellow-900">Auto Transition</h3>
+                      <p className="text-sm text-yellow-700">
+                        Automatically pause rounds when all questions are answered by multiple users, or advance to next round when complete.
+                      </p>
+                    </div>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoTransitionEnabled}
+                        onChange={(e) => setAutoTransitionEnabled(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        autoTransitionEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                      }`}>
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          autoTransitionEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </div>
+                      <span className="ml-3 text-sm font-medium text-gray-900">
+                        {autoTransitionEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Round Management */}
@@ -693,6 +794,195 @@ export default function AdminPage() {
                     </p>
                     <p className="text-sm text-gray-500">
                       Make sure to evaluate the quiz or round first before loading the leaderboard.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'progress' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Round Progress Tracking</h2>
+                  <div className="flex space-x-2">
+                    <select
+                      value={selectedRound}
+                      onChange={(e) => setSelectedRound(parseInt(e.target.value))}
+                      className="border rounded px-3 py-2"
+                    >
+                      {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
+                        <option key={round} value={round}>Round {round}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => fetchRoundProgress()}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    >
+                      Load Progress
+                    </button>
+                    <button
+                      onClick={handleAutoTransition}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      Check Auto Transition
+                    </button>
+                  </div>
+                </div>
+
+                {roundProgressData ? (
+                  <div className="space-y-6">
+                    {/* Round Statistics */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-3">Round {selectedRound} Statistics</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-700">Total Questions:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.totalQuestions}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Total Answers:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.totalAnswers}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Unique Users:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.uniqueUsers}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Completion:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.completionPercentage}%</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Questions with Answers:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.questionsWithAnswers}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Questions without Answers:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.questionsWithoutAnswers}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Avg Answers per Question:</span>
+                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.averageAnswersPerQuestion}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Generated:</span>
+                          <span className="ml-2 font-semibold">{new Date(roundProgressData.generatedAt).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question Progress */}
+                    <div className="bg-white border rounded-lg overflow-hidden">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="text-lg font-semibold">Question Progress</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Question</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Total Answers</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Unique Users</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Avg Response Time</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Answer Distribution</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {roundProgressData.questionProgress.map((question, index) => (
+                              <tr key={question.questionId} className="border-b border-gray-100">
+                                <td className="px-4 py-3">
+                                  <div className="text-sm">
+                                    <div className="font-medium text-gray-900">{index + 1}. {question.questionText}</div>
+                                    <div className="text-gray-500">ID: {question.questionId}</div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-semibold text-blue-600">{question.totalAnswers}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-semibold text-green-600">{question.uniqueUsersAnswered}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-gray-700">{question.averageResponseTime ? `${(question.averageResponseTime / 1000).toFixed(1)}s` : 'N/A'}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <div className="text-xs">
+                                    {Object.entries(question.answerDistribution).map(([option, count]) => (
+                                      <div key={option} className="text-gray-600">
+                                        Option {String.fromCharCode(65 + parseInt(option))}: {count}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* User Progress */}
+                    <div className="bg-white border rounded-lg overflow-hidden">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="text-lg font-semibold">User Progress</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">User</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Questions Answered</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Completion</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Avg Response Time</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Last Answered</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {roundProgressData.userProgress.map((user) => (
+                              <tr key={user.userId} className="border-b border-gray-100">
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <div className="font-semibold text-gray-900">{user.displayName}</div>
+                                    <div className="text-sm text-gray-500">#{user.uniqueId}</div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-semibold text-blue-600">{user.questionsAnswered}/{user.totalQuestions}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <div className="flex items-center justify-center">
+                                    <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                      <div 
+                                        className="bg-green-600 h-2 rounded-full" 
+                                        style={{ width: `${user.completionPercentage}%` }}
+                                      ></div>
+                                    </div>
+                                    <span className="text-sm font-semibold text-green-600">{user.completionPercentage}%</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-gray-700">{user.averageResponseTime ? `${(user.averageResponseTime / 1000).toFixed(1)}s` : 'N/A'}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-sm text-gray-600">
+                                    {user.lastAnsweredAt ? new Date(user.lastAnsweredAt).toLocaleTimeString() : 'Never'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">📊</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Progress Data</h3>
+                    <p className="text-gray-600 mb-4">
+                      Select a round and click &quot;Load Progress&quot; to view detailed progress information.
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      This will show you which questions have been answered and by whom.
                     </p>
                   </div>
                 )}
