@@ -7,6 +7,7 @@ Create a `.env.local` file in your project root with:
 
 ```env
 ADMIN_TOKEN=your-secret-admin-token-123
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
 ```
 
 ### 2. Access Admin Panel
@@ -33,6 +34,14 @@ The app now includes 3 quiz sets:
 - Evaluate quiz results
 - View all questions for each quiz
 - See real-time statistics
+- Auto transition controls
+- Round validation and management
+
+### Progress Tab
+- Track round progress in real-time
+- View question-by-question completion
+- Monitor user participation and completion rates
+- See answer distribution statistics
 
 ### Users Tab
 - View user management (coming soon)
@@ -60,4 +69,7 @@ The app now includes 3 quiz sets:
 - `POST /api/admin/quiz/[quizId]/start` - Start quiz
 - `POST /api/admin/quiz/[quizId]/stop` - Stop quiz  
 - `POST /api/admin/quiz/[quizId]/evaluate` - Evaluate quiz
+- `POST /api/admin/quiz/[quizId]/evaluate-round` - Evaluate specific round
+- `GET /api/admin/quiz/[quizId]/round-progress` - Get round progress data
+- `POST /api/quiz/[quizId]/auto-transition` - Auto transition between rounds
 - `GET /api/admin/users` - Get all users 

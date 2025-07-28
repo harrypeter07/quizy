@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function Onboarding() {
   const [formData, setFormData] = useState({
@@ -112,62 +113,103 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Join Quiz</h1>
-          <p className="text-gray-600">Enter your details to participate</p>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {errors.general}
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/blue-paperboard-bg.jpg"
+          alt="Blue Paperboard Background"
+          fill
+          className="object-cover"
+          priority
+        />
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#14134c]/80 to-[#f8e0a0]/20"></div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="w-full max-w-md mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="mb-6">
+              <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-white/90 rounded-full shadow-lg mb-4">
+                <div className="text-3xl sm:text-4xl">🏆</div>
+              </div>
             </div>
-          )}
-          
-          <div>
-            <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
-              Display Name *
-            </label>
-            <input
-              id="displayName"
-              type="text"
-              maxLength={20}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                errors.displayName ? 'border-red-300' : 'border-gray-300'
-              }`}
-              placeholder="Enter your display name"
-              value={formData.displayName}
-              onChange={e => handleInputChange('displayName', e.target.value)}
-            />
-            {errors.displayName && (
-              <p className="mt-1 text-sm text-red-600">{errors.displayName}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-500">
-              {formData.displayName.length}/20 characters
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-3 drop-shadow-lg">
+              Join Feud
+            </h1>
+            <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2 inline-block mb-4">
+              <p className="text-white font-semibold text-lg sm:text-xl">
+                Student Sports Club RBU
+              </p>
+            </div>
+            <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
+              Enter your details to participate
             </p>
           </div>
           
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating Account...' : 'Join Quiz'}
-          </button>
-          
-          {status && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm text-center">
-              {status}
+          {/* Form Card */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/20">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {errors.general && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {errors.general}
+                </div>
+              )}
+              
+              <div>
+                <label htmlFor="displayName" className="block text-sm font-semibold text-[#14134c] mb-3">
+                  Display Name *
+                </label>
+                <input
+                  id="displayName"
+                  type="text"
+                  maxLength={20}
+                  className={`w-full px-4 py-4 border-2 rounded-xl focus:ring-2 focus:ring-[#f8e0a0] focus:border-[#f8e0a0] transition-all duration-200 text-lg ${
+                    errors.displayName ? 'border-red-300' : 'border-[#14134c]/20'
+                  }`}
+                  placeholder="Enter your display name"
+                  value={formData.displayName}
+                  onChange={e => handleInputChange('displayName', e.target.value)}
+                />
+                {errors.displayName && (
+                  <p className="mt-2 text-sm text-red-600 font-medium">{errors.displayName}</p>
+                )}
+                <p className="mt-2 text-xs text-[#14134c]/60 font-medium">
+                  {formData.displayName.length}/20 characters
+                </p>
+              </div>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-[#14134c] to-[#14134c]/90 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-[#14134c]/90 hover:to-[#14134c] focus:ring-4 focus:ring-[#f8e0a0]/30 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Creating Account...
+                  </div>
+                ) : (
+                  'Join Feud'
+                )}
+              </button>
+              
+              {status && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm text-center font-medium">
+                  {status}
+                </div>
+              )}
+            </form>
+            
+            <div className="mt-6 text-center">
+              <p className="text-xs text-[#14134c]/70 font-medium">
+                By joining, you agree to participate fairly and follow Feud rules.
+              </p>
             </div>
-          )}
-        </form>
-        
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            By joining, you agree to participate fairly and follow quiz rules.
-          </p>
+          </div>
         </div>
       </div>
     </div>
