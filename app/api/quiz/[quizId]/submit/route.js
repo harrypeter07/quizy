@@ -25,6 +25,37 @@ export async function POST(req) {
     const db = client.db();
     const answers = db.collection('answers');
     
+    // Get quiz info and validate round
+    const quizInfo = getQuizInfo(quizId);
+    const questions = quizInfo.questions;
+    const questionIndex = questions.findIndex(q => q.id === questionId);
+    
+    if (questionIndex === -1) {
+      return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
+    }
+    
+    // Calculate expected round for this question
+    const expectedRound = getCurrentRound(questionIndex, quizInfo.questionsPerRound);
+    
+    // Validate that the submitted round matches the expected round
+    if (round && round !== expectedRound) {
+      return new Response(JSON.stringify({ 
+        error: `Invalid round. Question ${questionId} belongs to round ${expectedRound}, not round ${round}` 
+      }), { status: 400 });
+    }
+    
+    // Check if quiz is active and current round matches
+    const quizDoc = await db.collection('quizzes').findOne({ quizId });
+    if (!quizDoc || !quizDoc.active) {
+      return new Response(JSON.stringify({ error: 'Quiz is not active' }), { status: 400 });
+    }
+    
+    if (quizDoc.currentRound !== expectedRound) {
+      return new Response(JSON.stringify({ 
+        error: `Round ${expectedRound} is not currently active. Current active round is ${quizDoc.currentRound}` 
+      }), { status: 400 });
+    }
+    
     try {
       // Try to insert new answer (will fail if duplicate due to unique index)
       const result = await answers.insertOne({
@@ -35,7 +66,7 @@ export async function POST(req) {
         serverTimestamp,
         questionStartTimestamp,
         responseTimeMs: responseTimeMs || 0,
-        round: round || 1
+        round: expectedRound
       });
       
       return new Response(JSON.stringify({ 
