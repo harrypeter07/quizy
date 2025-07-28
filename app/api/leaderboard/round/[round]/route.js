@@ -1,4 +1,5 @@
 import clientPromise from '@/lib/db.js';
+import { getQuizInfo } from '@/lib/questions.js';
 import { z } from 'zod';
 
 export async function GET(req, { params }) {
@@ -11,8 +12,12 @@ export async function GET(req, { params }) {
   const { round } = awaitedParams;
   
   const roundNumber = parseInt(round);
-  if (roundNumber < 1 || roundNumber > 3) {
-    return new Response(JSON.stringify({ error: 'Round number must be between 1 and 3' }), { status: 400 });
+  const quizInfo = getQuizInfo('default'); // For now, hardcoded to default quiz
+  
+  if (roundNumber < 1 || roundNumber > quizInfo.totalRounds) {
+    return new Response(JSON.stringify({ 
+      error: `Round number must be between 1 and ${quizInfo.totalRounds}` 
+    }), { status: 400 });
   }
 
   try {

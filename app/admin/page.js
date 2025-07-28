@@ -400,7 +400,7 @@ export default function AdminPage() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
                         <span className="text-blue-700">Current Round:</span>
-                        <span className="ml-2 font-semibold">{roundStatus.currentRound} of {roundStatus.totalRounds}</span>
+                        <span className="ml-2 font-semibold">{roundStatus.currentRound} of {roundStatus.totalRounds || 3}</span>
                       </div>
                       <div>
                         <span className="text-blue-700">Status:</span>
@@ -449,24 +449,15 @@ export default function AdminPage() {
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-semibold mb-4">Round Management</h3>
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                    <button
-                      onClick={() => handleRoundAction('start-round', 1)}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                    >
-                      Start Round 1
-                    </button>
-                    <button
-                      onClick={() => handleRoundAction('start-round', 2)}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                    >
-                      Start Round 2
-                    </button>
-                    <button
-                      onClick={() => handleRoundAction('start-round', 3)}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                    >
-                      Start Round 3
-                    </button>
+                    {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
+                      <button
+                        key={round}
+                        onClick={() => handleRoundAction('start-round', round)}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                      >
+                        Start Round {round}
+                      </button>
+                    ))}
                     <button
                       onClick={() => handleRoundAction('pause-round')}
                       className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
@@ -485,24 +476,15 @@ export default function AdminPage() {
                   <div className="border-t pt-4">
                     <h4 className="text-md font-semibold mb-3">Round Evaluation (Find Top 10)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <button
-                        onClick={() => handleRoundEvaluation(1)}
-                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                      >
-                        Evaluate Round 1
-                      </button>
-                      <button
-                        onClick={() => handleRoundEvaluation(2)}
-                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                      >
-                        Evaluate Round 2
-                      </button>
-                      <button
-                        onClick={() => handleRoundEvaluation(3)}
-                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                      >
-                        Evaluate Round 3
-                      </button>
+                      {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
+                        <button
+                          key={round}
+                          onClick={() => handleRoundEvaluation(round)}
+                          className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                        >
+                          Evaluate Round {round}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -586,9 +568,9 @@ export default function AdminPage() {
                           onChange={(e) => setSelectedRound(parseInt(e.target.value))}
                           className="w-full border rounded px-3 py-2"
                         >
-                          <option value={1}>Round 1</option>
-                          <option value={2}>Round 2</option>
-                          <option value={3}>Round 3</option>
+                                                  {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
+                          <option key={round} value={round}>Round {round}</option>
+                        ))}
                         </select>
                       </div>
                     )}
@@ -705,7 +687,7 @@ export default function AdminPage() {
                     <div className="text-6xl mb-4">📊</div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No Leaderboard Data</h3>
                     <p className="text-gray-600 mb-4">
-                      Select your preferences and click "Load Leaderboard" to view results.
+                      Select your preferences and click &quot;Load Leaderboard&quot; to view results.
                     </p>
                     <p className="text-sm text-gray-500">
                       Make sure to evaluate the quiz or round first before loading the leaderboard.

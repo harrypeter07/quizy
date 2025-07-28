@@ -1,4 +1,5 @@
 import clientPromise from '@/lib/db.js';
+import { getQuizInfo } from '@/lib/questions.js';
 import { z } from 'zod';
 
 export async function GET(req, { params }) {
@@ -23,10 +24,14 @@ export async function GET(req, { params }) {
       }), { status: 404 });
     }
 
+    // Get quiz info for dynamic rounds
+    const quizInfo = getQuizInfo(quizId);
+    
     return new Response(JSON.stringify({
       quizId,
       currentRound: quizDoc.currentRound || 1,
-      totalRounds: 3,
+      totalRounds: quizInfo.totalRounds,
+      questionsPerRound: quizInfo.questionsPerRound,
       isActive: quizDoc.active || false,
       isPaused: quizDoc.paused || false,
       roundStartTime: quizDoc.roundStartTime || null,

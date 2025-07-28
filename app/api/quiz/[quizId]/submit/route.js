@@ -1,4 +1,5 @@
 import clientPromise from '@/lib/db.js';
+import { getQuizInfo, getCurrentRound } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const submissionSchema = z.object({
@@ -6,7 +7,9 @@ const submissionSchema = z.object({
   quizId: z.string().min(1),
   questionId: z.string().min(1),
   selectedOption: z.string().min(1),
-  questionStartTimestamp: z.number().int().positive()
+  questionStartTimestamp: z.number().int().positive(),
+  responseTimeMs: z.number().int().positive().optional(),
+  round: z.number().int().positive().optional()
 });
 
 export async function POST(req) {
@@ -16,22 +19,47 @@ export async function POST(req) {
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400 });
     }
-    const { userId, quizId, questionId, selectedOption, questionStartTimestamp } = parsed.data;
+    const { userId, quizId, questionId, selectedOption, questionStartTimestamp, responseTimeMs, round } = parsed.data;
     const serverTimestamp = Date.now();
     const client = await clientPromise;
     const db = client.db();
     const answers = db.collection('answers');
-    // Upsert answer, prevent duplicates
-    const result = await answers.updateOne(
-      { userId, questionId },
-      { $setOnInsert: { userId, quizId, questionId, selectedOption, serverTimestamp, questionStartTimestamp } },
-      { upsert: true }
-    );
-    if (result.upsertedCount === 0) {
-      // Duplicate submission
-      return new Response(JSON.stringify({ status: 'duplicate' }), { status: 200 });
+    
+    try {
+      // Try to insert new answer (will fail if duplicate due to unique index)
+      const result = await answers.insertOne({
+        userId,
+        quizId,
+        questionId,
+        selectedOption,
+        serverTimestamp,
+        questionStartTimestamp,
+        responseTimeMs: responseTimeMs || 0,
+        round: round || 1
+      });
+      
+      return new Response(JSON.stringify({ 
+        status: 'ok', 
+        serverTimestamp,
+        insertedId: result.insertedId 
+      }), { status: 201 });
+      
+    } catch (error) {
+      // Check if it's a duplicate key error
+      if (error.code === 11000) {
+        return new Response(JSON.stringify({ 
+          status: 'duplicate',
+          message: 'Answer already submitted for this question'
+        }), { status: 409 });
+      }
+      
+      // Other database error
+      console.error('Database error:', error);
+      return new Response(JSON.stringify({ 
+        error: 'Failed to save answer',
+        details: error.message 
+      }), { status: 500 });
     }
-    return new Response(JSON.stringify({ status: 'ok', serverTimestamp }), { status: 201 });
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });

@@ -137,7 +137,7 @@ export default function QuizPage() {
       selectedOption: optionIdx !== null ? String(optionIdx) : '',
       questionStartTimestamp: questionStart.current,
       responseTimeMs,
-      round: getCurrentRound(current)
+      round: getCurrentRoundLocal(current)
     };
     
     setUserAnswers(prev => [...prev, answerData]);
@@ -152,7 +152,7 @@ export default function QuizPage() {
       setSubmitting(false);
       
       // Check if we should pause after this question
-      if (shouldPauseAfterQuestion(current)) {
+      if (shouldPauseAfterQuestionLocal(current)) {
         setFeedback('Round completed! Waiting for admin to resume...');
         setIsRoundPaused(true);
         return;
@@ -172,7 +172,7 @@ export default function QuizPage() {
     const userId = Cookies.get('userId');
     
     try {
-      await fetch(`/api/quiz/${quizId}/submit`, {
+      const res = await fetch(`/api/quiz/${quizId}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,8 +181,16 @@ export default function QuizPage() {
           ...answerData
         })
       });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('Answer submission failed:', errorData.error);
+        // Show user-friendly error message
+        setFeedback('Failed to submit answer. Please try again.');
+      }
     } catch (error) {
       console.error('Error submitting answer:', error);
+      setFeedback('Network error. Answer saved locally.');
     }
   };
 
@@ -238,7 +246,7 @@ export default function QuizPage() {
           </div>
           <div className="mt-6 text-sm text-gray-500">
             <p>Total questions answered: {userAnswers.length}</p>
-            <p>Current round: {currentRound} of 3</p>
+            <p>Current round: {currentRound} of {quizInfo?.totalRounds || 3}</p>
           </div>
         </div>
       </div>
@@ -246,7 +254,7 @@ export default function QuizPage() {
   }
 
   const q = questions[current];
-  const currentQuestionRound = getCurrentRound(current);
+  const currentQuestionRound = getCurrentRoundLocal(current);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -258,9 +266,9 @@ export default function QuizPage() {
               <h1 className="text-2xl font-bold text-gray-900">
                 Question {current + 1} of {questions.length}
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Round {currentQuestionRound} of 3 • {answeredThisRound} answered this round
-              </p>
+                        <p className="text-sm text-gray-600 mt-1">
+            Round {currentQuestionRound} of {quizInfo?.totalRounds || 3} • {answeredThisRound} answered this round
+          </p>
             </div>
             <div className="bg-red-100 border border-red-200 rounded-lg px-4 py-2">
               <span className="text-red-800 font-mono text-lg">{timer}s</span>
@@ -272,7 +280,7 @@ export default function QuizPage() {
               {q.text}
             </h2>
             <div className="mt-2 text-sm text-blue-700">
-              Question {current + 1} • Round {currentQuestionRound}
+              Question {current + 1} • Round {currentQuestionRound} of {quizInfo?.totalRounds || 3}
             </div>
           </div>
         </div>
@@ -303,7 +311,7 @@ export default function QuizPage() {
         {feedback && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
             <div className="text-green-800 font-semibold text-center">{feedback}</div>
-            {shouldPauseAfterQuestion(current) && (
+            {shouldPauseAfterQuestionLocal(current) && (
               <div className="text-green-700 text-sm text-center mt-2">
                 Round {currentQuestionRound} will end after this question.
               </div>
@@ -324,16 +332,16 @@ export default function QuizPage() {
         <div className="bg-white rounded-xl shadow-lg p-4">
           <div className="flex justify-between text-sm text-gray-600 mb-2">
             <span>Round {currentQuestionRound} Progress</span>
-            <span>{Math.round(((answeredThisRound + 1) / QUESTIONS_PER_ROUND) * 100)}%</span>
+            <span>{Math.round(((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100)}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
               className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((answeredThisRound + 1) / QUESTIONS_PER_ROUND) * 100}%` }}
+              style={{ width: `${((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100}%` }}
             ></div>
           </div>
           <div className="mt-2 text-xs text-gray-500 text-center">
-            {answeredThisRound + 1} of {QUESTIONS_PER_ROUND} questions in round {currentQuestionRound}
+            {answeredThisRound + 1} of {quizInfo?.questionsPerRound || 5} questions in round {currentQuestionRound}
           </div>
           <div className="mt-2 text-xs text-gray-500 text-center">
             Total: {userAnswers.length} of {questions.length} questions answered

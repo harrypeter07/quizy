@@ -1,6 +1,6 @@
 import clientPromise from '@/lib/db.js';
 import { batchEvaluateUsers, calculateEvaluationStats } from '@/lib/scoring.js';
-import { getQuestions } from '@/lib/questions.js';
+import { getQuestions, getQuizInfo, getQuestionsForRound } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const adminToken = process.env.ADMIN_TOKEN;
@@ -23,18 +23,20 @@ export async function POST(req, { params }) {
     const body = await req.json();
     const { round } = body;
     
-    if (!round || round < 1 || round > 3) {
-      return new Response(JSON.stringify({ error: 'Invalid round number' }), { status: 400 });
+    // Get quiz info to validate round number
+    const quizInfo = getQuizInfo(quizId);
+    
+    if (!round || round < 1 || round > quizInfo.totalRounds) {
+      return new Response(JSON.stringify({ 
+        error: `Invalid round number. Must be between 1 and ${quizInfo.totalRounds}` 
+      }), { status: 400 });
     }
     
     const client = await clientPromise;
     const db = client.db();
     
-    // Get questions for this round (5 questions per round)
-    const allQuestions = getQuestions(quizId);
-    const startIndex = (round - 1) * 5;
-    const endIndex = startIndex + 5;
-    const roundQuestions = allQuestions.slice(startIndex, endIndex);
+    // Get questions for this round using dynamic calculation
+    const roundQuestions = getQuestionsForRound(quizId, round, quizInfo.questionsPerRound);
     
     // Get answers for this specific round
     const answers = await db.collection('answers').find({ 
