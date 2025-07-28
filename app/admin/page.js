@@ -10,6 +10,7 @@ export default function AdminPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedQuiz, setSelectedQuiz] = useState('default');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [roundStatus, setRoundStatus] = useState(null);
 
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -20,6 +21,12 @@ export default function AdminPage() {
       fetchDashboardData(storedToken);
     }
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchRoundStatus();
+    }
+  }, [selectedQuiz, isAuthenticated]);
 
   const handleLogin = async () => {
     if (!adminToken.trim()) {
@@ -62,6 +69,18 @@ export default function AdminPage() {
     }
   };
 
+  const fetchRoundStatus = async () => {
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`);
+      if (res.ok) {
+        const status = await res.json();
+        setRoundStatus(status);
+      }
+    } catch (error) {
+      console.error('Error fetching round status:', error);
+    }
+  };
+
   const handleQuizAction = async (action, quizId = selectedQuiz) => {
     setLoading(true);
     setStatus(`${action} quiz...`);
@@ -74,13 +93,71 @@ export default function AdminPage() {
       });
       
       if (res.ok) {
-        setStatus(`${action} successful!`);
+        const data = await res.json();
+        if (action === 'evaluate' && data.stats) {
+          setStatus(`Evaluation complete! ${data.totalEvaluated} participants evaluated. Avg score: ${data.stats.averageScore}`);
+        } else {
+          setStatus(`${action} successful!`);
+        }
         await fetchDashboardData(adminToken); // Refresh data
+        await fetchRoundStatus(); // Refresh round status
       } else {
         setStatus(`${action} failed`);
       }
     } catch (error) {
       setStatus(`Error ${action}ing quiz`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRoundAction = async (action, round = null) => {
+    setLoading(true);
+    setStatus(`${action} round...`);
+    
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, round })
+      });
+      
+      if (res.ok) {
+        setStatus(`Round ${action} successful!`);
+        await fetchRoundStatus(); // Refresh round status
+      } else {
+        setStatus(`Round ${action} failed`);
+      }
+    } catch (error) {
+      setStatus(`Error ${action}ing round`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRoundEvaluation = async (round) => {
+    setLoading(true);
+    setStatus(`Evaluating round ${round}...`);
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/evaluate-round`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ round })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(`Round ${round} evaluation complete! Top 10 participants identified. Avg score: ${data.stats.averageScore}`);
+        await fetchDashboardData(adminToken); // Refresh data
+      } else {
+        setStatus(`Round ${round} evaluation failed`);
+      }
+    } catch (error) {
+      setStatus(`Error evaluating round ${round}`);
     } finally {
       setLoading(false);
     }
@@ -205,20 +282,27 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600">Users:</span>
-                        <span className="ml-1 font-semibold">{quiz.userCount}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Answers:</span>
-                        <span className="ml-1 font-semibold">{quiz.answerCount}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Leaderboard:</span>
-                        <span className="ml-1 font-semibold">{quiz.leaderboard.length} entries</span>
-                      </div>
-                    </div>
+                                         <div className="grid grid-cols-3 gap-4 text-sm">
+                       <div>
+                         <span className="text-gray-600">Users:</span>
+                         <span className="ml-1 font-semibold">{quiz.userCount}</span>
+                       </div>
+                       <div>
+                         <span className="text-gray-600">Answers:</span>
+                         <span className="ml-1 font-semibold">{quiz.answerCount}</span>
+                       </div>
+                       <div>
+                         <span className="text-gray-600">Leaderboard:</span>
+                         <span className="ml-1 font-semibold">{quiz.leaderboard.length} entries</span>
+                       </div>
+                     </div>
+                     {quiz.leaderboard.length > 0 && (
+                       <div className="mt-3 text-xs text-gray-500">
+                         Top 3: {quiz.leaderboard.slice(0, 3).map(entry => 
+                           `${entry.displayName}#${entry.uniqueId}`
+                         ).join(', ')}
+                       </div>
+                     )}
                   </div>
                 ))}
               </div>
@@ -240,6 +324,37 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </div>
+
+                {/* Round Status */}
+                {roundStatus && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Round Status</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-700">Current Round:</span>
+                        <span className="ml-2 font-semibold">{roundStatus.currentRound} of {roundStatus.totalRounds}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">Status:</span>
+                        <span className={`ml-2 font-semibold ${roundStatus.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                          {roundStatus.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">Paused:</span>
+                        <span className={`ml-2 font-semibold ${roundStatus.isPaused ? 'text-orange-600' : 'text-green-600'}`}>
+                          {roundStatus.isPaused ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">Last Evaluation:</span>
+                        <span className="ml-2 font-semibold">
+                          {roundStatus.lastEvaluationTime ? new Date(roundStatus.lastEvaluationTime).toLocaleTimeString() : 'Never'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <button
@@ -260,6 +375,68 @@ export default function AdminPage() {
                   >
                     Evaluate Quiz
                   </button>
+                </div>
+
+                {/* Round Management */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Round Management</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                    <button
+                      onClick={() => handleRoundAction('start-round', 1)}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      Start Round 1
+                    </button>
+                    <button
+                      onClick={() => handleRoundAction('start-round', 2)}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      Start Round 2
+                    </button>
+                    <button
+                      onClick={() => handleRoundAction('start-round', 3)}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      Start Round 3
+                    </button>
+                    <button
+                      onClick={() => handleRoundAction('pause-round')}
+                      className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                    >
+                      Pause Round
+                    </button>
+                    <button
+                      onClick={() => handleRoundAction('resume-round')}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    >
+                      Resume Round
+                    </button>
+                  </div>
+                  
+                  {/* Round Evaluation */}
+                  <div className="border-t pt-4">
+                    <h4 className="text-md font-semibold mb-3">Round Evaluation (Find Top 10)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <button
+                        onClick={() => handleRoundEvaluation(1)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                      >
+                        Evaluate Round 1
+                      </button>
+                      <button
+                        onClick={() => handleRoundEvaluation(2)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                      >
+                        Evaluate Round 2
+                      </button>
+                      <button
+                        onClick={() => handleRoundEvaluation(3)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                      >
+                        Evaluate Round 3
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {dashboardData && (

@@ -20,17 +20,32 @@ export async function POST(req, { params }) {
   const { quizId } = awaitedParams;
   
   try {
+    const body = await req.json();
+    const { round } = body;
+    
+    if (!round || round < 1 || round > 3) {
+      return new Response(JSON.stringify({ error: 'Invalid round number' }), { status: 400 });
+    }
+    
     const client = await clientPromise;
     const db = client.db();
     
-    // Get all data in parallel for better performance
-    const [answers, users, questions] = await Promise.all([
-      db.collection('answers').find({ quizId }).toArray(),
-      db.collection('users').find({}).toArray(),
-      Promise.resolve(getQuestions(quizId))
-    ]);
+    // Get questions for this round (5 questions per round)
+    const allQuestions = getQuestions(quizId);
+    const startIndex = (round - 1) * 5;
+    const endIndex = startIndex + 5;
+    const roundQuestions = allQuestions.slice(startIndex, endIndex);
     
-    console.log(`Evaluating quiz ${quizId}: ${users.length} users, ${answers.length} answers`);
+    // Get answers for this specific round
+    const answers = await db.collection('answers').find({ 
+      quizId,
+      round: round
+    }).toArray();
+    
+    // Get all users
+    const users = await db.collection('users').find({}).toArray();
+    
+    console.log(`Evaluating round ${round} for quiz ${quizId}: ${users.length} users, ${answers.length} answers`);
     
     // Prepare user data for batch evaluation
     const usersData = [];
@@ -44,20 +59,20 @@ export async function POST(req, { params }) {
           answers: userAnswers.map(ans => ({
             questionId: ans.questionId,
             selectedOption: ans.selectedOption,
-            responseTimeMs: ans.serverTimestamp - ans.questionStartTimestamp
+            responseTimeMs: ans.responseTimeMs || 0
           }))
         });
       }
     }
     
-    // Batch evaluate all users
-    const evaluationResults = batchEvaluateUsers(usersData, questions);
+    // Batch evaluate all users for this round
+    const evaluationResults = batchEvaluateUsers(usersData, roundQuestions);
     
     // Calculate evaluation statistics
     const stats = calculateEvaluationStats(evaluationResults);
     
-    // Prepare leaderboard entries with detailed information
-    const leaderboardEntries = evaluationResults.slice(0, 20).map((result, index) => ({
+    // Get top 10 participants for this round
+    const top10 = evaluationResults.slice(0, 10).map((result, index) => ({
       rank: index + 1,
       userId: result.userId,
       displayName: result.displayName,
@@ -69,37 +84,40 @@ export async function POST(req, { params }) {
       totalQuestions: result.totalQuestions
     }));
     
-    // Store evaluation results
-    const evaluationData = {
+    // Store round evaluation results
+    const roundEvaluationData = {
       quizId,
-      entries: leaderboardEntries,
+      round,
+      entries: top10,
       stats,
       evaluatedAt: Date.now(),
       totalParticipants: evaluationResults.length,
       evaluationDetails: {
-        questionsEvaluated: questions.length,
+        questionsEvaluated: roundQuestions.length,
         totalAnswersProcessed: answers.length,
         scoringMethod: 'multi-tier with time bonus'
       }
     };
     
-    await db.collection('leaderboard').updateOne(
-      { quizId },
-      { $set: evaluationData },
+    await db.collection('roundLeaderboard').updateOne(
+      { quizId, round },
+      { $set: roundEvaluationData },
       { upsert: true }
     );
     
-    console.log(`Evaluation complete for quiz ${quizId}: ${evaluationResults.length} participants evaluated`);
+    console.log(`Round ${round} evaluation complete for quiz ${quizId}: ${evaluationResults.length} participants evaluated`);
     
     return new Response(JSON.stringify({ 
       status: 'ok', 
-      leaderboard: leaderboardEntries,
+      round,
+      top10,
       stats,
-      totalEvaluated: evaluationResults.length
+      totalEvaluated: evaluationResults.length,
+      message: `Round ${round} evaluation complete. Top 10 participants identified.`
     }), { status: 200 });
     
-  } catch (err) {
-    console.error('Evaluation error:', err);
+  } catch (error) {
+    console.error('Round evaluation error:', error);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
   }
 } 

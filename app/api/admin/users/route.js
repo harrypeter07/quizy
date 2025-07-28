@@ -1,4 +1,4 @@
-import clientPromise from '../../../lib/db.js';
+import clientPromise from '@/lib/db.js';
 
 const adminToken = process.env.ADMIN_TOKEN;
 

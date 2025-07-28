@@ -1,5 +1,5 @@
-import clientPromise from '../../../../lib/db.js';
-import { getAllQuizzes } from '../../../../lib/questions.js';
+import clientPromise from '@/lib/db.js';
+import { getAllQuizzes } from '@/lib/questions.js';
 
 export async function GET(req) {
   const token = req.headers.get('authorization');

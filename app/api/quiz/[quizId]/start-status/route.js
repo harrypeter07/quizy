@@ -1,4 +1,4 @@
-import clientPromise from '../../../../../lib/db.js';
+import clientPromise from '@/lib/db.js';
 
 export async function GET(req, { params }) {
   const { quizId } = await params;

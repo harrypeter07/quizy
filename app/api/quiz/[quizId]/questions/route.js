@@ -1,4 +1,4 @@
-import { getQuestions } from '../../../../../lib/questions.js';
+import { getQuestions } from '@/lib/questions.js';
 import { z } from 'zod';
 
 export async function GET(req, { params }) {
