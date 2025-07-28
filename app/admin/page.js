@@ -11,6 +11,10 @@ export default function AdminPage() {
   const [selectedQuiz, setSelectedQuiz] = useState('default');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [roundStatus, setRoundStatus] = useState(null);
+  const [leaderboardData, setLeaderboardData] = useState(null);
+  const [leaderboardLimit, setLeaderboardLimit] = useState(10);
+  const [leaderboardType, setLeaderboardType] = useState('full');
+  const [selectedRound, setSelectedRound] = useState(1);
 
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -163,6 +167,70 @@ export default function AdminPage() {
     }
   };
 
+  const fetchLeaderboard = async () => {
+    setLoading(true);
+    setStatus('Loading leaderboard...');
+    
+    try {
+      const params = new URLSearchParams({
+        quizId: selectedQuiz,
+        limit: leaderboardLimit,
+        type: leaderboardType
+      });
+      
+      if (leaderboardType === 'round') {
+        params.append('round', selectedRound);
+      }
+      
+      const res = await fetch(`/api/admin/leaderboard?${params}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data);
+        setStatus(`Leaderboard loaded: ${data.actualCount} participants`);
+      } else {
+        const errorData = await res.json();
+        setStatus(`Failed to load leaderboard: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error loading leaderboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportLeaderboard = () => {
+    if (!leaderboardData) return;
+    
+    const csvContent = [
+      ['Rank', 'Name', 'Unique ID', 'Score', 'Accuracy (%)', 'Avg Response Time (s)', 'Correct Answers', 'Total Questions'],
+      ...leaderboardData.entries.map(entry => [
+        entry.rank,
+        entry.displayName,
+        entry.uniqueId,
+        entry.score,
+        entry.accuracy?.toFixed(1) || 'N/A',
+        entry.averageResponseTime?.toFixed(0) || 'N/A',
+        entry.correctAnswers,
+        entry.totalQuestions
+      ])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leaderboard-${selectedQuiz}-${leaderboardType}${leaderboardType === 'round' ? `-round${selectedRound}` : ''}-top${leaderboardLimit}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    setStatus('Leaderboard exported successfully!');
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setAdminToken('');
@@ -247,7 +315,7 @@ export default function AdminPage() {
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
-              {['dashboard', 'quizzes', 'users'].map((tab) => (
+              {['dashboard', 'quizzes', 'leaderboard', 'users'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -452,6 +520,196 @@ export default function AdminPage() {
                         ))}
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'leaderboard' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Leaderboard Management</h2>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={fetchLeaderboard}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    >
+                      Load Leaderboard
+                    </button>
+                    {leaderboardData && (
+                      <button
+                        onClick={exportLeaderboard}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                      >
+                        Export CSV
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Leaderboard Controls */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold mb-4">Leaderboard Settings</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Quiz</label>
+                      <select
+                        value={selectedQuiz}
+                        onChange={(e) => setSelectedQuiz(e.target.value)}
+                        className="w-full border rounded px-3 py-2"
+                      >
+                        {dashboardData?.quizStats.map((quiz) => (
+                          <option key={quiz.id} value={quiz.id}>
+                            {quiz.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                      <select
+                        value={leaderboardType}
+                        onChange={(e) => setLeaderboardType(e.target.value)}
+                        className="w-full border rounded px-3 py-2"
+                      >
+                        <option value="full">Full Quiz</option>
+                        <option value="round">Round Specific</option>
+                      </select>
+                    </div>
+                    
+                    {leaderboardType === 'round' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Round</label>
+                        <select
+                          value={selectedRound}
+                          onChange={(e) => setSelectedRound(parseInt(e.target.value))}
+                          className="w-full border rounded px-3 py-2"
+                        >
+                          <option value={1}>Round 1</option>
+                          <option value={2}>Round 2</option>
+                          <option value={3}>Round 3</option>
+                        </select>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Top N Participants</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={leaderboardLimit}
+                        onChange={(e) => setLeaderboardLimit(parseInt(e.target.value))}
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="10"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Leaderboard Display */}
+                {leaderboardData ? (
+                  <div className="space-y-4">
+                    {/* Stats Summary */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-2">Leaderboard Summary</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-700">Quiz:</span>
+                          <span className="ml-2 font-semibold">{leaderboardData.quizId}</span>
+                        </div>
+                        {leaderboardData.round && (
+                          <div>
+                            <span className="text-blue-700">Round:</span>
+                            <span className="ml-2 font-semibold">{leaderboardData.round}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-blue-700">Participants:</span>
+                          <span className="ml-2 font-semibold">{leaderboardData.totalParticipants}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Showing:</span>
+                          <span className="ml-2 font-semibold">Top {leaderboardData.actualCount}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Average Score:</span>
+                          <span className="ml-2 font-semibold">{leaderboardData.stats?.averageScore?.toFixed(1) || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Highest Score:</span>
+                          <span className="ml-2 font-semibold">{leaderboardData.stats?.highestScore || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Evaluated:</span>
+                          <span className="ml-2 font-semibold">{new Date(leaderboardData.evaluatedAt).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Leaderboard Table */}
+                    <div className="bg-white border rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Rank</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Participant</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Score</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Accuracy</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Response Time</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Correct</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {leaderboardData.entries.map((entry, index) => (
+                              <tr key={entry.userId} className={`border-b border-gray-100 ${index < 3 ? 'bg-yellow-50' : ''}`}>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center">
+                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
+                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
+                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-gray-900'}`}>
+                                      #{entry.rank}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <div className="font-semibold text-gray-900">{entry.displayName}</div>
+                                    <div className="text-sm text-gray-500">#{entry.uniqueId}</div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-bold text-lg text-blue-600">{entry.score}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-semibold text-green-600">{entry.accuracy?.toFixed(1)}%</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-gray-700">{entry.averageResponseTime?.toFixed(0)}s</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-gray-700">{entry.correctAnswers}/{entry.totalQuestions}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">📊</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Leaderboard Data</h3>
+                    <p className="text-gray-600 mb-4">
+                      Select your preferences and click "Load Leaderboard" to view results.
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Make sure to evaluate the quiz or round first before loading the leaderboard.
+                    </p>
                   </div>
                 )}
               </div>
