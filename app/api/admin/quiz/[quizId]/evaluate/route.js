@@ -1,4 +1,4 @@
-import clientPromise from '../../../../../../../lib/db';
+import clientPromise from '../../../../../../lib/db';
 import { calculateScore } from '../../../../../../../lib/scoring';
 import { z } from 'zod';
 
