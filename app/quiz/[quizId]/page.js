@@ -3,9 +3,9 @@ import { useEffect, useState, useRef } from 'react';
 import Cookies from 'js-cookie';
 import { useParams, useRouter } from 'next/navigation';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import { getCurrentRound, shouldPauseAfterQuestion } from '@/lib/questions.js';
 
 const QUESTION_TIME = 15; // seconds
-const QUESTIONS_PER_ROUND = 5;
 
 export default function QuizPage() {
   const { quizId } = useParams();
@@ -24,6 +24,7 @@ export default function QuizPage() {
   const [currentRound, setCurrentRound] = useState(1);
   const [answeredThisRound, setAnsweredThisRound] = useState(0);
   const [clickedOptions, setClickedOptions] = useState(new Set()); // Prevent multiple clicks
+  const [quizInfo, setQuizInfo] = useState(null);
   const timerRef = useRef();
   const questionStart = useRef(Date.now());
   const roundStatusInterval = useRef();
@@ -32,7 +33,18 @@ export default function QuizPage() {
   useEffect(() => {
     fetch(`/api/quiz/${quizId}/questions`)
       .then(res => res.json())
-      .then(data => setQuestions(data.questions || []));
+      .then(data => {
+        setQuestions(data.questions || []);
+        // Calculate quiz info for dynamic rounds
+        const totalQuestions = data.questions?.length || 0;
+        const questionsPerRound = 5;
+        const totalRounds = Math.ceil(totalQuestions / questionsPerRound);
+        setQuizInfo({
+          totalQuestions,
+          totalRounds,
+          questionsPerRound
+        });
+      });
     
     checkRoundStatus();
     
@@ -66,13 +78,13 @@ export default function QuizPage() {
   };
 
   // Calculate current round based on question number
-  const getCurrentRound = (questionIndex) => {
-    return Math.floor(questionIndex / QUESTIONS_PER_ROUND) + 1;
+  const getCurrentRoundLocal = (questionIndex) => {
+    return getCurrentRound(questionIndex, quizInfo?.questionsPerRound || 5);
   };
 
   // Check if we should pause after this question
-  const shouldPauseAfterQuestion = (questionIndex) => {
-    return (questionIndex + 1) % QUESTIONS_PER_ROUND === 0;
+  const shouldPauseAfterQuestionLocal = (questionIndex) => {
+    return shouldPauseAfterQuestion(questionIndex, quizInfo?.questionsPerRound || 5);
   };
 
   useEffect(() => {
@@ -190,27 +202,11 @@ export default function QuizPage() {
         });
       }
       
-      // Submit all answers at once
-      const allAnswersData = {
-        userId,
-        quizId,
-        answers: userAnswers
-      };
-      
-      const res = await fetch(`/api/quiz/${quizId}/submit-all`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(allAnswersData)
-      });
-      
-      if (res.ok) {
-        router.replace(`/quiz/${quizId}/results`);
-      } else {
-        console.error('Failed to submit answers');
-        router.replace(`/quiz/${quizId}/results`);
-      }
+      // No need to submit all answers again since they're already submitted individually
+      // Just redirect to results
+      router.replace(`/quiz/${quizId}/results`);
     } catch (error) {
-      console.error('Error submitting answers:', error);
+      console.error('Error in final submission:', error);
       router.replace(`/quiz/${quizId}/results`);
     } finally {
       setSubmittingAll(false);
