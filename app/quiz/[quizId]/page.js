@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import Cookies from 'js-cookie';
 import { useParams, useRouter } from 'next/navigation';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -49,7 +49,7 @@ export default function QuizPage() {
     
     // Initial round status check
     checkRoundStatus();
-  }, [quizId]);
+  }, [quizId, checkRoundStatus]);
 
   const checkRoundStatus = async () => {
     try {
@@ -117,7 +117,7 @@ export default function QuizPage() {
     }, 1000);
     
     return () => clearInterval(timerRef.current);
-  }, [current, questions.length, isRoundPaused, currentRound]);
+  }, [current, questions.length, isRoundPaused, currentRound, getCurrentRoundLocal, handleAnswer, questions]);
 
   // Separate effect for round status checking (less frequent)
   useEffect(() => {

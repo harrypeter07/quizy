@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function AdminPage() {
@@ -44,7 +44,7 @@ export default function AdminPage() {
       fetchRoundStatus();
       fetchRoundProgress();
     }
-  }, [selectedQuiz, isAuthenticated, adminToken]);
+  }, [selectedQuiz, isAuthenticated, adminToken, fetchDashboardData, fetchUserCount, fetchRoundStatus, fetchRoundProgress]);
 
   // Auto refresh user count every 10 seconds (reduced frequency)
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function AdminPage() {
     }, 10000);
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, selectedQuiz]);
+  }, [isAuthenticated, selectedQuiz, fetchUserCount]);
 
   // Auto refresh round progress every 5 seconds when quiz is active
   useEffect(() => {
@@ -66,7 +66,7 @@ export default function AdminPage() {
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, selectedQuiz, roundProgress?.roundStatus]);
+  }, [isAuthenticated, selectedQuiz, roundProgress?.roundStatus, fetchRoundProgress]);
 
   // Auto transition check interval
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function AdminPage() {
     }, 10000); // Check every 10 seconds
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, autoTransitionEnabled, selectedQuiz]);
+  }, [isAuthenticated, autoTransitionEnabled, selectedQuiz, handleAutoTransition]);
 
   const handleLogin = async () => {
     if (!adminToken.trim()) {
@@ -106,7 +106,7 @@ export default function AdminPage() {
     }
   };
 
-  const fetchDashboardData = async (token) => {
+  const fetchDashboardData = useCallback(async (token) => {
     try {
       const res = await fetch('/api/admin/dashboard', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -118,9 +118,9 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
-  };
+  }, []);
 
-  const fetchRoundStatus = async () => {
+  const fetchRoundStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`);
       if (res.ok) {
@@ -130,9 +130,9 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error fetching round status:', error);
     }
-  };
+  }, [selectedQuiz]);
 
-  const fetchRoundProgress = async () => {
+  const fetchRoundProgress = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress`, {
         headers: { 'Authorization': `Bearer ${adminToken}` }
@@ -144,7 +144,7 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error fetching round progress:', error);
     }
-  };
+  }, [selectedQuiz, adminToken]);
 
   const handleQuizAction = async (action, quizId = selectedQuiz) => {
     setLoading(true);
@@ -295,7 +295,7 @@ export default function AdminPage() {
     setStatus('Leaderboard exported successfully!');
   };
 
-  const handleAutoTransition = async () => {
+  const handleAutoTransition = useCallback(async () => {
     setLoading(true);
     setStatus('Checking auto transition...');
     
@@ -323,7 +323,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedQuiz, fetchRoundStatus, fetchDashboardData, adminToken]);
 
   const handleCreateQuiz = async () => {
     if (!newQuizData.name.trim()) {
@@ -382,7 +382,7 @@ export default function AdminPage() {
     setStatus('Logged out');
   };
 
-  const fetchUserCount = async () => {
+  const fetchUserCount = useCallback(async () => {
     try {
       if (selectedQuiz) {
         console.log('Fetching user count for quiz:', selectedQuiz);
@@ -403,7 +403,7 @@ export default function AdminPage() {
       console.error('Error fetching user count:', error);
       // Don't show error to user for background polling
     }
-  };
+  }, [selectedQuiz, adminToken]);
 
   const fetchCurrentQuizInfo = async () => {
     try {

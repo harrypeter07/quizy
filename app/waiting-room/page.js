@@ -121,7 +121,7 @@ export default function WaitingRoom() {
       if (interval) clearInterval(interval);
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
-  }, [quizId, router]); // Removed 'polling' from dependencies
+  }, [quizId, router, polling]); // Added 'polling' back to dependencies
 
   if (loading) {
     return <LoadingSpinner message="Loading waiting room..." />;
