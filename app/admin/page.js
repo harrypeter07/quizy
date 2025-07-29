@@ -23,6 +23,9 @@ export default function AdminPage() {
     questionCount: 15,
     questionsPerRound: 5
   });
+  const [userCountData, setUserCountData] = useState(null);
+  const [currentQuizInfo, setCurrentQuizInfo] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -37,8 +40,21 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchRoundStatus();
+      fetchUserCount();
+      fetchCurrentQuizInfo();
     }
   }, [selectedQuiz, isAuthenticated]);
+
+  // Auto refresh user count every 5 seconds
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const interval = setInterval(() => {
+      fetchUserCount();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, selectedQuiz]);
 
   // Auto transition check interval
   useEffect(() => {
@@ -328,7 +344,20 @@ export default function AdminPage() {
         setStatus(`Quiz "${newQuizData.name}" created successfully!`);
         setShowCreateQuiz(false);
         setNewQuizData({ name: '', questionCount: 15, questionsPerRound: 5 });
-        await fetchDashboardData(adminToken); // Refresh dashboard
+        
+        // Refresh dashboard data
+        await fetchDashboardData(adminToken);
+        
+        // Automatically select the newly created quiz
+        if (data.quizId) {
+          setSelectedQuiz(data.quizId);
+        }
+        
+        // Immediately fetch the current quiz info to ensure it's displayed
+        await fetchCurrentQuizInfo();
+        
+        // Also fetch user count for the new quiz
+        await fetchUserCount();
       } else {
         const errorData = await res.json();
         setStatus(`Failed to create quiz: ${errorData.error}`);
@@ -346,6 +375,60 @@ export default function AdminPage() {
     setDashboardData(null);
     localStorage.removeItem('adminToken');
     setStatus('Logged out');
+  };
+
+  const fetchUserCount = async () => {
+    try {
+      if (selectedQuiz) {
+        const res = await fetch(`/api/admin/quiz/${selectedQuiz}/user-count`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUserCountData(data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user count:', error);
+    }
+  };
+
+  const fetchCurrentQuizInfo = async () => {
+    try {
+      const res = await fetch('/api/quiz/recent');
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentQuizInfo(data);
+        // Set the selected quiz to the recent quiz ID
+        setSelectedQuiz(data.quizId);
+      } else {
+        console.error('Failed to fetch quiz info:', res.status);
+      }
+    } catch (error) {
+      console.error('Error fetching quiz info:', error);
+    }
+  };
+
+  const handleRefreshQuizDetails = async () => {
+    setIsRefreshing(true);
+    setStatus('Refreshing quiz details...');
+    
+    try {
+      // Refresh all quiz-related data
+      await Promise.all([
+        fetchDashboardData(adminToken),
+        fetchCurrentQuizInfo(),
+        fetchUserCount(),
+        fetchRoundStatus()
+      ]);
+      
+      setStatus('Quiz details refreshed successfully!');
+    } catch (error) {
+      console.error('Error refreshing quiz details:', error);
+      setStatus('Error refreshing quiz details');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -398,6 +481,236 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Current Quiz Display */}
+        {currentQuizInfo && (
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl p-6 mb-8 shadow-lg">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center">
+              <div className="mb-4 lg:mb-0">
+                <div className="flex items-center mb-2">
+                  <h1 className="text-3xl font-bold">{currentQuizInfo.name || 'Loading...'}</h1>
+                  {isRefreshing && (
+                    <div className="ml-3 flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      <span className="text-sm text-blue-100">Refreshing...</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4 text-blue-100">
+                  <span className="flex items-center">
+                    <span className="mr-2">📝</span>
+                    {currentQuizInfo.questionCount} Questions
+                  </span>
+                  <span className="flex items-center">
+                    <span className="mr-2">🔄</span>
+                    {currentQuizInfo.totalRounds} Rounds
+                  </span>
+                  <span className="flex items-center">
+                    <span className="mr-2">⏱️</span>
+                    {currentQuizInfo.questionsPerRound} per Round
+                  </span>
+                  <span className="flex items-center">
+                    <span className="mr-2">🎯</span>
+                    Quiz ID: {selectedQuiz}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-4 text-blue-100 mt-2">
+                  <span className="flex items-center">
+                    <span className="mr-2">📅</span>
+                    Created: {currentQuizInfo.formattedCreatedAt}
+                  </span>
+                </div>
+                {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active && (
+                  <div className="mt-3">
+                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      🟢 Active Quiz
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleRefreshQuizDetails}
+                  disabled={isRefreshing}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                >
+                  {isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+                </button>
+                <button
+                  onClick={() => setShowCreateQuiz(!showCreateQuiz)}
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  ➕ Create New Quiz
+                </button>
+                <button
+                  onClick={() => handleQuizAction('start')}
+                  className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  🚀 Start Quiz
+                </button>
+                <button
+                  onClick={() => handleQuizAction('stop')}
+                  className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  ⏹️ Stop Quiz
+                </button>
+                <button
+                  onClick={() => handleQuizAction('evaluate')}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  📊 Evaluate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quiz Creation Form - Show when creating new quiz */}
+        {showCreateQuiz && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-blue-900">Create New Quiz</h3>
+              <button
+                onClick={() => setShowCreateQuiz(false)}
+                className="text-blue-600 hover:text-blue-800 font-semibold"
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Quiz Name</label>
+                <input
+                  type="text"
+                  value={newQuizData.name}
+                  onChange={(e) => setNewQuizData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full border border-blue-300 rounded px-3 py-2"
+                  placeholder="Enter quiz name (e.g., Science Quiz, History Quiz)"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-blue-900 mb-1">Total Questions</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="50"
+                    value={newQuizData.questionCount}
+                    onChange={(e) => setNewQuizData(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))}
+                    className="w-full border border-blue-300 rounded px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-blue-900 mb-1">Questions per Round</label>
+                  <input
+                    type="number"
+                    min="3"
+                    max="10"
+                    value={newQuizData.questionsPerRound}
+                    onChange={(e) => setNewQuizData(prev => ({ ...prev, questionsPerRound: parseInt(e.target.value) }))}
+                    className="w-full border border-blue-300 rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleCreateQuiz}
+                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold"
+              >
+                🎯 Create Quiz
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Real-time User Counter */}
+        {userCountData && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                👥 Real-time User Activity
+              </h2>
+              <div className="flex items-center text-green-600 text-sm font-medium">
+                {isRefreshing ? (
+                  <>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-spin"></div>
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                    Live Updates
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-500 mb-4 text-center">
+              Showing users who joined after this quiz was created ({userCountData.quizName})
+            </div>
+            
+            {isRefreshing ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="text-gray-600 font-medium">Refreshing user data...</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600">{userCountData.totalUsers}</div>
+                    <div className="text-sm text-gray-600">Total Users</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-600">{userCountData.waitingUsers}</div>
+                    <div className="text-sm text-gray-600">In Waiting Room</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-orange-600">{userCountData.activeUsers}</div>
+                    <div className="text-sm text-gray-600">Active Participants</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-purple-600">{userCountData.recentUsers}</div>
+                    <div className="text-sm text-gray-600">Recently Joined</div>
+                  </div>
+                </div>
+                
+                {/* User List */}
+                {userCountData.userList.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Users in Waiting Room</h3>
+                    <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {userCountData.userList.map((user, index) => (
+                          <div key={user.userId} className="flex items-center justify-between bg-white rounded-lg p-2 shadow-sm">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-sm mr-2">
+                                {user.displayName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900 text-sm">{user.displayName}</div>
+                                <div className="text-xs text-gray-500">#{user.uniqueId}</div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {new Date(user.joinedAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2 text-center">
+                      Last updated: {new Date(userCountData.lastUpdated).toLocaleTimeString()}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Overall Stats */}
         {dashboardData && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -487,80 +800,6 @@ export default function AdminPage() {
 
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
-                {/* Quiz Creation */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-blue-900">Create New Quiz</h3>
-                    <button
-                      onClick={() => setShowCreateQuiz(!showCreateQuiz)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      {showCreateQuiz ? 'Cancel' : 'Create Quiz'}
-                    </button>
-                  </div>
-                  
-                  {showCreateQuiz && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-blue-900 mb-1">Quiz Name</label>
-                        <input
-                          type="text"
-                          value={newQuizData.name}
-                          onChange={(e) => setNewQuizData(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full border border-blue-300 rounded px-3 py-2"
-                          placeholder="Enter quiz name"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-blue-900 mb-1">Total Questions</label>
-                          <input
-                            type="number"
-                            min="5"
-                            max="50"
-                            value={newQuizData.questionCount}
-                            onChange={(e) => setNewQuizData(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))}
-                            className="w-full border border-blue-300 rounded px-3 py-2"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-blue-900 mb-1">Questions per Round</label>
-                          <input
-                            type="number"
-                            min="3"
-                            max="10"
-                            value={newQuizData.questionsPerRound}
-                            onChange={(e) => setNewQuizData(prev => ({ ...prev, questionsPerRound: parseInt(e.target.value) }))}
-                            className="w-full border border-blue-300 rounded px-3 py-2"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={handleCreateQuiz}
-                        className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
-                      >
-                        Create Quiz
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Quiz Selection */}
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">Quiz Management</h2>
-                  <select
-                    value={selectedQuiz}
-                    onChange={(e) => setSelectedQuiz(e.target.value)}
-                    className="border rounded px-3 py-2"
-                  >
-                    {dashboardData?.quizStats.map((quiz) => (
-                      <option key={quiz.id} value={quiz.id}>
-                        {quiz.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Current Quiz Status */}
                 {roundStatus && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">

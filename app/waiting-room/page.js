@@ -22,11 +22,13 @@ export default function WaitingRoom() {
     // Fetch quiz and user info
     const fetchInfo = async () => {
       try {
-        // Fetch quiz info
-        const quizRes = await fetch('/api/quiz/default/quiz-info');
-        if (quizRes.ok) {
-          const quizData = await quizRes.json();
-          setQuizInfo(quizData);
+        const res = await fetch('/api/quiz/recent');
+        if (res.ok) {
+          const data = await res.json();
+          setQuizInfo(data);
+          
+          // Set the quizId cookie to the recent quiz ID
+          Cookies.set('quizId', data.quizId, { expires: 30 });
         }
         
         // Get user info from cookies
@@ -36,12 +38,12 @@ export default function WaitingRoom() {
           setUserInfo({ displayName, uniqueId });
         }
       } catch (error) {
-        console.error('Error fetching info:', error);
+        console.error('Error fetching quiz info:', error);
       }
     };
     
     fetchInfo();
-  }, []);
+  }, [quizId]);
 
   useEffect(() => {
     let interval;
@@ -154,24 +156,48 @@ export default function WaitingRoom() {
                 Student Sports Club RBU
               </p>
             </div>
-            <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
-              Get ready for the Feud!
-            </p>
             
-            {/* Quiz and User Info */}
+            {/* Quiz Info Display */}
             {quizInfo && (
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-white/20">
-                <p className="text-white font-bold text-lg mb-2">{quizInfo.name}</p>
-                <div className="text-white/90 text-sm space-y-1">
-                  <p>{quizInfo.questionCount} Questions • {quizInfo.totalRounds} Rounds</p>
-                  {userInfo && (
-                    <p className="font-semibold text-white">
-                      Welcome, {userInfo.displayName}#{userInfo.uniqueId}
-                    </p>
-                  )}
+              <div className="bg-gradient-to-r from-blue-600/90 to-purple-600/90 backdrop-blur-sm rounded-xl px-6 py-4 mb-4 border border-white/30 shadow-lg">
+                <h2 className="text-white font-bold text-2xl sm:text-3xl mb-2 drop-shadow-md">
+                  {quizInfo.name}
+                </h2>
+                <div className="flex flex-wrap justify-center gap-4 text-white/90 text-sm sm:text-base mb-2">
+                  <span className="flex items-center">
+                    <span className="mr-1">📝</span>
+                    {quizInfo.questionCount} Questions
+                  </span>
+                  <span className="flex items-center">
+                    <span className="mr-1">🔄</span>
+                    {quizInfo.totalRounds} Rounds
+                  </span>
+                  <span className="flex items-center">
+                    <span className="mr-1">⏱️</span>
+                    {quizInfo.questionsPerRound} per Round
+                  </span>
+                </div>
+                <div className="text-center">
+                  <p className="text-white/80 text-xs">
+                    Created: {quizInfo.formattedCreatedAt}
+                  </p>
                 </div>
               </div>
             )}
+            
+            {/* User Welcome */}
+            {userInfo && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-white/20">
+                <p className="text-white/90 text-sm">Welcome,</p>
+                <p className="text-white font-bold text-lg">
+                  {userInfo.displayName}#{userInfo.uniqueId}
+                </p>
+              </div>
+            )}
+            
+            <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
+              Get ready for the Feud!
+            </p>
           </div>
           
           {/* Main Card */}

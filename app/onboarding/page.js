@@ -16,20 +16,23 @@ export default function Onboarding() {
   const router = useRouter();
 
   useEffect(() => {
-    // Fetch current quiz information
-    const fetchQuizInfo = async () => {
+    // Fetch most recently created quiz information
+    const fetchRecentQuiz = async () => {
       try {
-        const res = await fetch('/api/quiz/default/quiz-info');
+        const res = await fetch('/api/quiz/recent');
         if (res.ok) {
           const data = await res.json();
           setQuizInfo(data);
+          
+          // Set the quizId cookie to the recent quiz ID
+          Cookies.set('quizId', data.quizId, { expires: 30 });
         }
       } catch (error) {
-        console.error('Error fetching quiz info:', error);
+        console.error('Error fetching recent quiz:', error);
       }
     };
     
-    fetchQuizInfo();
+    fetchRecentQuiz();
   }, []);
 
   const validateForm = () => {
@@ -170,6 +173,9 @@ export default function Onboarding() {
                 <p className="text-white font-bold text-lg mb-1">{quizInfo.name}</p>
                 <div className="text-white/90 text-sm space-y-1">
                   <p>{quizInfo.questionCount} Questions • {quizInfo.totalRounds} Rounds</p>
+                  <p className="text-white/80 text-xs">
+                    Created: {quizInfo.formattedCreatedAt}
+                  </p>
                   <p className={`font-semibold ${quizInfo.active ? 'text-green-300' : 'text-yellow-300'}`}>
                     {quizInfo.active ? '🟢 Quiz is Active' : '🟡 Quiz is Inactive'}
                   </p>

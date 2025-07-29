@@ -38,16 +38,18 @@ export async function POST(req, { params }) {
     // Get questions for this round using dynamic calculation
     const roundQuestions = getQuestionsForRound(quizId, round, quizInfo.questionsPerRound);
     
-    // Get answers for this specific round
-    const answers = await db.collection('answers').find({ 
-      quizId,
-      round: round
-    }).toArray();
-    
-    // Get all users
+    // Get users and answers for this specific round
     const users = await db.collection('users').find({}).toArray();
-    
-    console.log(`Evaluating round ${round} for quiz ${quizId}: ${users.length} users, ${answers.length} answers`);
+    const answers = await db.collection('answers').find({ 
+      quizId, 
+      round: round 
+    }).toArray();
+
+    if (!users.length || !answers.length) {
+      return new Response(JSON.stringify({
+        error: 'No users or answers found for this round'
+      }), { status: 404 });
+    }
     
     // Prepare user data for batch evaluation
     const usersData = [];
@@ -106,8 +108,6 @@ export async function POST(req, { params }) {
       { $set: roundEvaluationData },
       { upsert: true }
     );
-    
-    console.log(`Round ${round} evaluation complete for quiz ${quizId}: ${evaluationResults.length} participants evaluated`);
     
     return new Response(JSON.stringify({ 
       status: 'ok', 

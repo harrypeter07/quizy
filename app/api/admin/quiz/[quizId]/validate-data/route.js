@@ -142,18 +142,16 @@ export async function POST(req, { params }) {
     }
     
     // Store validation report
-    await db.collection('validationReports').updateOne(
-      { quizId },
-      { $set: validationReport },
-      { upsert: true }
-    );
-    
-    console.log(`Data validation complete for quiz ${quizId}: ${validationReport.issues.length} issues found`);
-    
+    await db.collection('validationReports').insertOne({
+      quizId,
+      timestamp: new Date(),
+      ...validationReport
+    });
+
     return new Response(JSON.stringify({
-      status: 'ok',
-      validationReport,
-      message: `Validation complete. Found ${validationReport.issues.length} issues.`
+      success: true,
+      message: 'Data validation completed',
+      validationReport
     }), { status: 200 });
     
   } catch (error) {

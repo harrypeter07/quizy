@@ -86,12 +86,16 @@ export default function QuizPage() {
     // Check if current question belongs to the active round
     const currentQuestionRound = getCurrentRoundLocal(current);
     if (currentQuestionRound !== currentRound) {
-      console.log(`Question ${current + 1} (Round ${currentQuestionRound}) doesn't match active round ${currentRound}. Skipping...`);
-      // Auto-advance to next question if not at the end
-      if (current < questions.length - 1) {
-        setTimeout(() => setCurrent(c => c + 1), 1000);
-        return;
+      // Skip to the first question of the current round
+      const firstQuestionOfRound = questions.findIndex(q => {
+        const questionRound = Math.floor(q.id / questionsPerRound) + 1;
+        return questionRound === currentRound;
+      });
+      
+      if (firstQuestionOfRound !== -1) {
+        setCurrent(firstQuestionOfRound);
       }
+      return;
     }
     
     setTimer(QUESTION_TIME);

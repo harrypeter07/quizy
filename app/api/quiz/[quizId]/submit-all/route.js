@@ -48,14 +48,13 @@ export async function POST(req, { params }) {
     // Use ordered: false to continue processing even if some documents fail
     const result = await answersCollection.insertMany(answersToInsert, { ordered: false });
     
-    console.log(`Submitted ${result.insertedCount} answers for user ${userId} in quiz ${quizId}`);
-    
-    return new Response(JSON.stringify({ 
-      status: 'ok', 
-      submittedCount: result.insertedCount,
-      totalAttempted: answersToInsert.length,
-      message: 'All answers submitted successfully'
-    }), { status: 201 });
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'All answers submitted successfully',
+      totalAttempted: answers.length,
+      insertedCount: result.insertedCount,
+      acknowledgedCount: result.acknowledgedCount
+    }), { status: 200 });
     
   } catch (error) {
     console.error('Batch submission error:', error);

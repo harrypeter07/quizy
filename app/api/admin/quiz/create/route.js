@@ -17,13 +17,16 @@ export async function POST(req) {
 
   try {
     const data = await req.json();
+    
     const parsed = createQuizSchema.safeParse(data);
     
     if (!parsed.success) {
+      console.error('Validation error:', parsed.error);
       return new Response(JSON.stringify({ error: 'Invalid input data' }), { status: 400 });
     }
 
     const { name, questionCount, questionsPerRound } = parsed.data;
+    
     const client = await clientPromise;
     const db = client.db();
 
@@ -65,7 +68,7 @@ export async function POST(req) {
     };
 
     // Insert quiz into database
-    await db.collection('quizzes').insertOne(quizDoc);
+    const result = await db.collection('quizzes').insertOne(quizDoc);
 
     return new Response(JSON.stringify({
       success: true,

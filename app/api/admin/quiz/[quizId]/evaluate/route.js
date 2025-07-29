@@ -23,14 +23,15 @@ export async function POST(req, { params }) {
     const client = await clientPromise;
     const db = client.db();
     
-    // Get all data in parallel for better performance
-    const [answers, users, questions] = await Promise.all([
-      db.collection('answers').find({ quizId }).toArray(),
-      db.collection('users').find({}).toArray(),
-      Promise.resolve(getQuestions(quizId))
-    ]);
-    
-    console.log(`Evaluating quiz ${quizId}: ${users.length} users, ${answers.length} answers`);
+    // Get all users and answers for this quiz
+    const users = await db.collection('users').find({}).toArray();
+    const answers = await db.collection('answers').find({ quizId }).toArray();
+
+    if (!users.length || !answers.length) {
+      return new Response(JSON.stringify({
+        error: 'No users or answers found for this quiz'
+      }), { status: 404 });
+    }
     
     // Validate data integrity
     const validationErrors = [];
@@ -118,8 +119,6 @@ export async function POST(req, { params }) {
       { $set: evaluationData },
       { upsert: true }
     );
-    
-    console.log(`Evaluation complete for quiz ${quizId}: ${evaluationResults.length} participants evaluated`);
     
     return new Response(JSON.stringify({ 
       status: 'ok', 

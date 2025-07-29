@@ -21,25 +21,24 @@ export async function POST(req, { params }) {
     const client = await clientPromise;
     const db = client.db();
     
-    // Start the quiz by setting it as active
+    // Update quiz status
     await db.collection('quizzes').updateOne(
       { quizId },
       { 
         $set: { 
-          active: true,
-          startedAt: Date.now(),
+          active: true, 
           currentRound: 1,
-          paused: false
-        }
-      },
-      { upsert: true }
+          paused: false,
+          startedAt: new Date()
+        } 
+      }
     );
-    
-    console.log(`Quiz ${quizId} started by admin`);
-    
+
     return new Response(JSON.stringify({ 
-      status: 'ok',
-      message: `Quiz ${quizId} started successfully`
+      success: true, 
+      message: 'Quiz started successfully',
+      quizId,
+      currentRound: 1
     }), { status: 200 });
     
   } catch (error) {

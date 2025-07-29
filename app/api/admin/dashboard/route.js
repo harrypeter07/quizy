@@ -1,5 +1,4 @@
 import clientPromise from '@/lib/db.js';
-import { getAllQuizzes } from '@/lib/questions.js';
 
 export async function GET(req) {
   const token = req.headers.get('authorization');
@@ -13,18 +12,24 @@ export async function GET(req) {
     const client = await clientPromise;
     const db = client.db();
 
-    // Get all quizzes from questions data
-    const quizzes = getAllQuizzes();
+    // Get all quizzes directly from database instead of questions.js
+    const quizzes = await db.collection('quizzes')
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
     
     // Get statistics for each quiz
     const quizStats = await Promise.all(quizzes.map(async (quiz) => {
-      const quizId = quiz.id;
+      const quizId = quiz.quizId;
       
-      // Get quiz status from database
-      const quizDoc = await db.collection('quizzes').findOne({ quizId });
-      
-      // Get user count for this quiz
-      const userCount = await db.collection('users').countDocuments();
+      // Get user count for this quiz (users who joined after quiz creation)
+      const quizCreatedAt = new Date(quiz.createdAt).getTime();
+      const allUsers = await db.collection('users').find({}).toArray();
+      const usersForThisQuiz = allUsers.filter(user => {
+        const userJoinedAt = new Date(user.createdAt).getTime();
+        return userJoinedAt >= quizCreatedAt;
+      });
+      const userCount = usersForThisQuiz.length;
       
       // Get answer count for this quiz
       const answerCount = await db.collection('answers').countDocuments({ quizId });
@@ -33,13 +38,18 @@ export async function GET(req) {
       const leaderboard = await db.collection('leaderboard').findOne({ quizId });
       
       return {
-        ...quiz,
-        active: quizDoc?.active || false,
-        startedAt: quizDoc?.startedAt || null,
+        id: quiz.quizId,
+        name: quiz.name, // Use actual name from database
+        questionCount: quiz.questionCount,
+        totalRounds: quiz.totalRounds,
+        questionsPerRound: quiz.questionsPerRound,
+        active: quiz.active || false,
+        startedAt: quiz.startedAt || null,
         userCount,
         answerCount,
         leaderboard: leaderboard?.entries || [],
-        evaluatedAt: leaderboard?.evaluatedAt || null
+        evaluatedAt: leaderboard?.evaluatedAt || null,
+        createdAt: quiz.createdAt
       };
     }));
 
