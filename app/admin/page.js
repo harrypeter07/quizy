@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { questionSets } from '../lib/questionSets';
 
 export default function AdminPage() {
   const [adminToken, setAdminToken] = useState('');
@@ -21,6 +22,8 @@ export default function AdminPage() {
   const [userCountData, setUserCountData] = useState(null);
   const [currentQuizInfo, setCurrentQuizInfo] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedQuestionSet, setSelectedQuestionSet] = useState('default');
+  const [availableQuestionSets, setAvailableQuestionSets] = useState(questionSets);
 
   // Define all callback functions first
   const fetchDashboardData = useCallback(async (token) => {
@@ -188,13 +191,14 @@ export default function AdminPage() {
     setStatus('Creating quiz...');
     
     try {
+      const selectedSet = availableQuestionSets.find(set => set.key === selectedQuestionSet);
       const res = await fetch('/api/admin/quiz/create', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${adminToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(newQuizData)
+        body: JSON.stringify({ ...newQuizData, questions: selectedSet.questions })
       });
       
       if (res.ok) {
@@ -478,6 +482,18 @@ export default function AdminPage() {
                   className="w-full border border-blue-300 rounded px-3 py-2"
                   placeholder="Enter quiz name (e.g., Science Quiz, History Quiz)"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Question Set</label>
+                <select
+                  value={selectedQuestionSet}
+                  onChange={e => setSelectedQuestionSet(e.target.value)}
+                  className="w-full border border-blue-300 rounded px-3 py-2"
+                >
+                  {availableQuestionSets.map(set => (
+                    <option key={set.key} value={set.key}>{set.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -24,31 +24,13 @@ export default function QuizPage() {
   const timerRef = useRef();
   const questionStart = useRef(Date.now());
 
-  // Load questions
+  // Load questions from localStorage on mount
   useEffect(() => {
     const storedQuiz = localStorage.getItem(`quiz_${quizId}`);
     if (storedQuiz) {
       const data = JSON.parse(storedQuiz);
       setQuestions(data.questions || []);
-      setQuizInfo({
-        totalQuestions: data.questions?.length || 0
-      });
-    } else {
-      // Fallback to API if not in localStorage (e.g., for new quizzes)
-      fetch(`/api/quiz/${quizId}/questions`)
-        .then(res => res.json())
-        .then(data => {
-          setQuestions(data.questions || []);
-          setQuizInfo({
-            totalQuestions: data.questions?.length || 0
-          });
-          localStorage.setItem(`quiz_${quizId}`, JSON.stringify(data));
-        })
-        .catch(error => {
-          console.error('Error fetching questions from API:', error);
-          setQuestions([]); // Clear questions on error
-          setQuizInfo(null);
-        });
+      setQuizInfo({ totalQuestions: data.questions?.length || 0 });
     }
   }, [quizId]);
 

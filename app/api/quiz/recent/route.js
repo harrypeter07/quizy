@@ -42,6 +42,7 @@ export async function GET() {
       quizId: recentQuiz.quizId,
       name: recentQuiz.name,
       questionCount: recentQuiz.questionCount,
+      questions: recentQuiz.questions,
       active: recentQuiz.active,
       createdAt: recentQuiz.createdAt,
       formattedCreatedAt: formattedTime,

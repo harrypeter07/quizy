@@ -5,7 +5,13 @@ const adminToken = process.env.ADMIN_TOKEN;
 
 const createQuizSchema = z.object({
   name: z.string().min(1).max(100),
-  questionCount: z.number().min(5).max(50)
+  questionCount: z.number().min(5).max(50),
+  questions: z.array(z.object({
+    id: z.string(),
+    text: z.string(),
+    options: z.array(z.string()),
+    correctAnswers: z.array(z.object({ option: z.number(), points: z.number() }))
+  })).optional()
 });
 
 export async function POST(req) {
@@ -24,7 +30,10 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Invalid input data' }), { status: 400 });
     }
 
-    const { name, questionCount } = parsed.data;
+    const { name, questionCount, questions } = data;
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return new Response(JSON.stringify({ error: 'A valid question set must be provided.' }), { status: 400 });
+    }
     
     const client = await clientPromise;
     const db = client.db();
@@ -32,28 +41,15 @@ export async function POST(req) {
     // Generate a unique quiz ID
     const quizId = `quiz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Create sample questions
-    const questions = [];
-    for (let i = 1; i <= questionCount; i++) {
-      questions.push({
-        id: `q_${quizId}_${i}`,
-        text: `Sample Question ${i} - This is a placeholder question. You can replace this with actual questions.`,
-        options: [
-          'Option A - Sample answer',
-          'Option B - Sample answer', 
-          'Option C - Sample answer',
-          'Option D - Sample answer'
-        ],
-        correctAnswer: 0 // Default to first option
-      });
-    }
+    // Use provided questions, trim to questionCount
+    const selectedQuestions = questions.slice(0, questionCount).map((q, idx) => ({ ...q, id: q.id || `q_${quizId}_${idx+1}` }));
 
-    // Create quiz document (no round fields)
+    // Create quiz document
     const quizDoc = {
       quizId,
       name,
-      questionCount,
-      questions,
+      questionCount: selectedQuestions.length,
+      questions: selectedQuestions,
       active: false,
       quizIsStarted: false,
       createdAt: new Date(),

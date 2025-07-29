@@ -23,6 +23,9 @@ export default function WaitingRoom() {
           const data = await res.json();
           setQuizInfo(data);
           Cookies.set('quizId', data.quizId, { expires: 30 });
+          if (data.questions) {
+            localStorage.setItem(`quiz_${data.quizId}`, JSON.stringify({ questions: data.questions }));
+          }
         } else {
           setError('Failed to load quiz info.');
         }

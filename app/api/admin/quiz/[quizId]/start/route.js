@@ -41,6 +41,9 @@ export async function POST(req, { params }) {
       }
     );
     const updatedQuiz = await db.collection('quizzes').findOne({ quizId });
+    if (!updatedQuiz || !Array.isArray(updatedQuiz.questions) || updatedQuiz.questions.length === 0) {
+      return new Response(JSON.stringify({ error: 'Quiz cannot be started without a valid question set.' }), { status: 400 });
+    }
     console.log('[admin-start] Updated quiz document:', updatedQuiz);
     console.log(`[admin-start] Quiz ${quizId} started successfully.`);
 
