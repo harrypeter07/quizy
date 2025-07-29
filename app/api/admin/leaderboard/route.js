@@ -28,17 +28,52 @@ export async function GET(req, { params }) {
         round: parseInt(round) 
       });
     } else {
-      // Get full quiz leaderboard
-      leaderboardData = await db.collection('leaderboard').findOne({ quizId });
+      // Get full quiz leaderboard from validation reports
+      const validationReport = await db.collection('validationReports')
+        .findOne(
+          { quizId },
+          { sort: { timestamp: -1 } } // Get the most recent validation report
+        );
+      
+      if (validationReport && validationReport.participants) {
+        // Transform validation report data to leaderboard format
+        leaderboardData = {
+          quizId: validationReport.quizId,
+          entries: validationReport.participants.userScores.map((user, index) => ({
+            rank: user.rank,
+            userId: user.userId,
+            displayName: user.displayName,
+            uniqueId: user.uniqueId,
+            score: user.score,
+            accuracy: user.accuracy,
+            averageResponseTime: user.averageResponseTime,
+            correctAnswers: user.correctAnswers,
+            totalQuestions: user.totalQuestions
+          })),
+          stats: {
+            totalParticipants: validationReport.participants.totalUsers,
+            averageScore: validationReport.participants.averageScore,
+            highestScore: validationReport.participants.highestScore,
+            lowestScore: validationReport.participants.lowestScore,
+            averageAccuracy: 0, // Will be calculated if needed
+            averageResponseTime: 0 // Will be calculated if needed
+          },
+          totalParticipants: validationReport.participants.totalUsers,
+          evaluatedAt: validationReport.timestamp
+        };
+      } else {
+        // Fallback to old leaderboard collection if no validation report found
+        leaderboardData = await db.collection('leaderboard').findOne({ quizId });
+      }
     }
 
     if (!leaderboardData) {
       return new Response(JSON.stringify({ 
-        error: 'No leaderboard data found' 
+        error: 'No leaderboard data found. Please run validation or evaluation first.' 
       }), { status: 404 });
     }
 
-    // Limit the number of entries
+    // Always respect the limit - show only the requested number of top users
     const limitedEntries = leaderboardData.entries.slice(0, limit);
 
     return new Response(JSON.stringify({
@@ -81,17 +116,52 @@ export async function POST(req, { params }) {
         round: parseInt(round) 
       });
     } else {
-      // Get full quiz leaderboard
-      leaderboardData = await db.collection('leaderboard').findOne({ quizId });
+      // Get full quiz leaderboard from validation reports
+      const validationReport = await db.collection('validationReports')
+        .findOne(
+          { quizId },
+          { sort: { timestamp: -1 } } // Get the most recent validation report
+        );
+      
+      if (validationReport && validationReport.participants) {
+        // Transform validation report data to leaderboard format
+        leaderboardData = {
+          quizId: validationReport.quizId,
+          entries: validationReport.participants.userScores.map((user, index) => ({
+            rank: user.rank,
+            userId: user.userId,
+            displayName: user.displayName,
+            uniqueId: user.uniqueId,
+            score: user.score,
+            accuracy: user.accuracy,
+            averageResponseTime: user.averageResponseTime,
+            correctAnswers: user.correctAnswers,
+            totalQuestions: user.totalQuestions
+          })),
+          stats: {
+            totalParticipants: validationReport.participants.totalUsers,
+            averageScore: validationReport.participants.averageScore,
+            highestScore: validationReport.participants.highestScore,
+            lowestScore: validationReport.participants.lowestScore,
+            averageAccuracy: 0, // Will be calculated if needed
+            averageResponseTime: 0 // Will be calculated if needed
+          },
+          totalParticipants: validationReport.participants.totalUsers,
+          evaluatedAt: validationReport.timestamp
+        };
+      } else {
+        // Fallback to old leaderboard collection if no validation report found
+        leaderboardData = await db.collection('leaderboard').findOne({ quizId });
+      }
     }
 
     if (!leaderboardData) {
       return new Response(JSON.stringify({ 
-        error: 'No leaderboard data found. Please evaluate the quiz/round first.' 
+        error: 'No leaderboard data found. Please run validation or evaluation first.' 
       }), { status: 404 });
     }
 
-    // Limit the number of entries
+    // Always respect the limit - show only the requested number of top users
     const limitedEntries = leaderboardData.entries.slice(0, limit);
 
     return new Response(JSON.stringify({

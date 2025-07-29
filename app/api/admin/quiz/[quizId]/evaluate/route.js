@@ -91,7 +91,7 @@ export async function POST(req, { params }) {
     const stats = calculateEvaluationStats(evaluationResults);
     
     // Prepare leaderboard entries with detailed information
-    const leaderboardEntries = evaluationResults.slice(0, 20).map((result, index) => ({
+    const leaderboardEntries = evaluationResults.map((result, index) => ({
       rank: index + 1,
       userId: result.userId,
       displayName: result.displayName,
@@ -122,6 +122,25 @@ export async function POST(req, { params }) {
       { $set: evaluationData },
       { upsert: true }
     );
+    
+    // Store a summary in validationReports for audit
+    await db.collection('validationReports').insertOne({
+      quizId,
+      timestamp: new Date(),
+      evaluation: {
+        totalParticipants: evaluationResults.length,
+        totalAnswers: answers.length,
+        totalQuestions: questions.length,
+        stats,
+        entries: leaderboardEntries.map(e => ({
+          userId: e.userId,
+          displayName: e.displayName,
+          score: e.score,
+          accuracy: e.accuracy,
+          averageResponseTime: e.averageResponseTime
+        }))
+      }
+    });
     
     return new Response(JSON.stringify({ 
       status: 'ok', 

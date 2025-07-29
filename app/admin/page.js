@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { questionSets } from '../lib/questionSets';
+import { questionSets } from '../../lib/questionSets';
 
 export default function AdminPage() {
   const [adminToken, setAdminToken] = useState('');
@@ -24,6 +24,7 @@ export default function AdminPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('default');
   const [availableQuestionSets, setAvailableQuestionSets] = useState(questionSets);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   // Define all callback functions first
   const fetchDashboardData = useCallback(async (token) => {
@@ -54,6 +55,27 @@ export default function AdminPage() {
       setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
     }
   }, [selectedQuiz]);
+
+  // Add fetchLeaderboard function
+  const fetchLeaderboard = useCallback(async () => {
+    if (!selectedQuiz) return;
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch(`/api/admin/leaderboard?quizId=${selectedQuiz}&limit=${leaderboardLimit}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data);
+      } else {
+        setLeaderboardData(null);
+      }
+    } catch (error) {
+      setLeaderboardData(null);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [selectedQuiz, adminToken, leaderboardLimit]);
 
   // Remove all round-related state
   // Remove roundStatus, roundProgress, selectedRound, autoTransitionEnabled, and any round-based state
@@ -122,6 +144,13 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
+  // Auto-load leaderboard when tab, quiz, or limit changes
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && selectedQuiz) {
+      fetchLeaderboard();
+    }
+  }, [activeTab, selectedQuiz, leaderboardLimit, fetchLeaderboard]);
+
   const handleLogin = async () => {
     if (!adminToken.trim()) {
       setStatus('Please enter admin token');
@@ -154,7 +183,7 @@ export default function AdminPage() {
     setStatus(`${action} quiz...`);
     
     try {
-      const endpoint = action === 'start' ? 'start' : action === 'stop' ? 'stop' : 'evaluate';
+      const endpoint = action === 'start' ? 'start' : 'stop';
       const res = await fetch(`/api/admin/quiz/${quizId}/${endpoint}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${adminToken}` }
@@ -162,15 +191,10 @@ export default function AdminPage() {
       
       if (res.ok) {
         const data = await res.json();
-        if (action === 'evaluate' && data.stats) {
-          setStatus(`Evaluation complete! ${data.totalEvaluated} participants evaluated. Avg score: ${data.stats.averageScore}`);
-        } else {
-          setStatus(`${action} successful!`);
-        }
+        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
         await fetchDashboardData(adminToken); // Refresh data
-        // Removed fetchRoundStatus() and fetchRoundProgress()
       } else {
-        setStatus(`${action} failed`);
+        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
       }
     } catch (error) {
       setStatus(`Error ${action}ing quiz`);
@@ -279,7 +303,7 @@ export default function AdminPage() {
 
   const handleValidateData = async () => {
     setLoading(true);
-    setStatus('Validating quiz data...');
+    setStatus('Calculating user scores...');
     
     try {
       const res = await fetch(`/api/admin/quiz/${selectedQuiz}/validate-data`, {
@@ -295,18 +319,18 @@ export default function AdminPage() {
         const { validationReport } = data;
         
         if (validationReport.issues.length === 0) {
-          setStatus('✅ Data validation passed! No issues found.');
+          setStatus(`✅ Scores calculated successfully! ${validationReport.participants?.totalUsers || 0} participants processed.`);
         } else {
           const issueCount = validationReport.issues.reduce((sum, issue) => sum + issue.count, 0);
-          setStatus(`⚠️ Data validation found ${issueCount} issues across ${validationReport.issues.length} categories. Check console for details.`);
+          setStatus(`✅ Scores calculated! ${validationReport.participants?.totalUsers || 0} participants processed. Found ${issueCount} data issues.`);
           console.log('Data validation issues:', validationReport.issues);
         }
       } else {
         const errorData = await res.json();
-        setStatus(`Data validation failed: ${errorData.error}`);
+        setStatus(`Score calculation failed: ${errorData.error}`);
       }
     } catch (error) {
-      setStatus('Error validating data');
+      setStatus('Error calculating scores');
     } finally {
       setLoading(false);
     }
@@ -695,12 +719,49 @@ export default function AdminPage() {
 
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
+                {dashboardData?.quizStats && dashboardData.quizStats.length > 0 && (
+                  <div className="mb-4">
+                    <label htmlFor="quiz-select" className="mr-2 font-semibold">Select Quiz:</label>
+                    <select
+                      id="quiz-select"
+                      value={selectedQuiz}
+                      onChange={e => setSelectedQuiz(e.target.value)}
+                      className="px-3 py-2 rounded border"
+                    >
+                      {dashboardData.quizStats.map(quiz => (
+                        <option key={quiz.id} value={quiz.id}>
+                          {quiz.name} ({quiz.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Show selected quiz info */}
+                {dashboardData?.quizStats && selectedQuiz && (
+                  (() => {
+                    const quiz = dashboardData.quizStats.find(q => q.id === selectedQuiz);
+                    if (!quiz) return null;
+                    return (
+                      <div className="mb-4 p-4 border rounded bg-gray-50">
+                        <h3 className="text-lg font-semibold mb-1">{quiz.name}</h3>
+                        <div className="flex flex-wrap gap-6 text-sm">
+                          <div><span className="text-gray-600">Questions:</span> <span className="font-semibold">{quiz.questionCount}</span></div>
+                          <div><span className="text-gray-600">Answers:</span> <span className="font-semibold">{quiz.answerCount}</span></div>
+                          <div><span className="text-gray-600">Participants:</span> <span className="font-semibold">{quiz.userCount}</span></div>
+                          <div><span className="text-gray-600">Status:</span> <span className={`font-semibold ${quiz.active ? 'text-green-700' : 'text-gray-500'}`}>{quiz.active ? 'Active' : 'Inactive'}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
                 {dashboardData && selectedQuiz && (
                   <div className="flex flex-col sm:flex-row gap-3 mb-4">
                     <button onClick={() => handleQuizAction('start')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{isQuizActive ? '✅ Quiz Started' : '🚀 Start Quiz'}</button>
                     <button onClick={() => handleQuizAction('stop')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-red-500 hover:bg-red-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}</button>
-                    <button onClick={() => handleQuizAction('evaluate')} disabled={loading} className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Evaluate</button>
-                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">🔍 Validate Data</button>
+
+                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Calculate Scores</button>
                     <button onClick={() => setShowCreateQuiz(!showCreateQuiz)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold">➕ Create New Quiz</button>
                   </div>
                 )}
@@ -734,17 +795,10 @@ export default function AdminPage() {
                     <button
                       onClick={fetchLeaderboard}
                       className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                      disabled={leaderboardLoading}
                     >
-                      Load Leaderboard
+                      {leaderboardLoading ? 'Loading...' : 'Load Leaderboard'}
                     </button>
-                    {leaderboardData && (
-                      <button
-                        onClick={exportLeaderboard}
-                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                      >
-                        Export CSV
-                      </button>
-                    )}
                   </div>
                 </div>
 
@@ -825,7 +879,7 @@ export default function AdminPage() {
                           <span className="ml-2 font-semibold">{leaderboardData.stats?.highestScore || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Evaluated:</span>
+                          <span className="text-blue-700">Calculated:</span>
                           <span className="ml-2 font-semibold">{new Date(leaderboardData.evaluatedAt).toLocaleString()}</span>
                         </div>
                       </div>
@@ -888,10 +942,7 @@ export default function AdminPage() {
                     <div className="text-6xl mb-4">📊</div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No Leaderboard Data</h3>
                     <p className="text-gray-600 mb-4">
-                      Select your preferences and click &quot;Load Leaderboard&quot; to view results.
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Make sure to evaluate the quiz or round first before loading the leaderboard.
+                      No leaderboard data available. Make sure to calculate scores first and click &quot;Load Leaderboard&quot;.
                     </p>
                   </div>
                 )}
@@ -903,18 +954,7 @@ export default function AdminPage() {
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold">Round Progress Tracking</h2>
                   <div className="flex space-x-2">
-                    <button
-                      onClick={fetchRoundProgress}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      Refresh Progress
-                    </button>
-                    <button
-                      onClick={handleAutoTransition}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                    >
-                      Check Auto Transition
-                    </button>
+                    {/* Removed fetchRoundProgress and handleAutoTransition button and calls in progress tab */}
                   </div>
                 </div>
 
