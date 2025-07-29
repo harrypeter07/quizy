@@ -32,15 +32,12 @@ export async function GET(req, { params }) {
       hour12: true
     });
     
+    // Only return quizId, name, questionCount, questions, and active
     const quizInfo = {
       id: quizDoc.quizId,
       name: quizDoc.name, // Use actual name from database
       questionCount: quizDoc.questionCount,
-      totalRounds: quizDoc.totalRounds,
-      questionsPerRound: quizDoc.questionsPerRound,
       active: quizDoc.active || false,
-      currentRound: quizDoc.currentRound || 1,
-      paused: quizDoc.paused || false,
       createdAt: quizDoc.createdAt,
       formattedCreatedAt: formattedTime,
       createdBy: quizDoc.createdBy

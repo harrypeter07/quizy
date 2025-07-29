@@ -37,15 +37,12 @@ export async function GET() {
       hour12: true
     });
 
+    // Only return quizId, name, questionCount, questions, and active
     const responseData = {
       quizId: recentQuiz.quizId,
       name: recentQuiz.name,
       questionCount: recentQuiz.questionCount,
-      totalRounds: recentQuiz.totalRounds,
-      questionsPerRound: recentQuiz.questionsPerRound,
       active: recentQuiz.active,
-      currentRound: recentQuiz.currentRound,
-      paused: recentQuiz.paused,
       createdAt: recentQuiz.createdAt,
       formattedCreatedAt: formattedTime,
       createdBy: recentQuiz.createdBy

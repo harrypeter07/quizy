@@ -8,8 +8,7 @@ const submissionSchema = z.object({
   questionId: z.string().min(1),
   selectedOption: z.string().min(1),
   questionStartTimestamp: z.number().int().positive(),
-  responseTimeMs: z.number().int().positive().optional(),
-  round: z.number().int().positive().optional()
+  responseTimeMs: z.number().int().positive().optional()
 });
 
 export async function POST(req) {
@@ -20,14 +19,14 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400 });
     }
     
-    const { userId, quizId, questionId, selectedOption, questionStartTimestamp, responseTimeMs, round } = parsed.data;
+    const { userId, quizId, questionId, selectedOption, questionStartTimestamp, responseTimeMs } = parsed.data;
     const serverTimestamp = Date.now();
     
     const client = await clientPromise;
     const db = client.db();
     const answers = db.collection('answers');
     
-    // Get quiz info and validate round
+    // Get quiz info and validate question
     const quizInfo = getQuizInfo(quizId);
     const questions = quizInfo.questions;
     const questionIndex = questions.findIndex(q => q.id === questionId);
@@ -36,27 +35,11 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
     }
     
-    // Calculate expected round for this question
-    const expectedRound = getCurrentRound(questionIndex, quizInfo.questionsPerRound);
-    
-    // Validate that the submitted round matches the expected round
-    if (round && round !== expectedRound) {
-      return new Response(JSON.stringify({ 
-        error: `Invalid round. Question ${questionId} belongs to round ${expectedRound}, not round ${round}` 
-      }), { status: 400 });
-    }
-    
     // Check if quiz is active and current round matches
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
     
     if (!quizDoc || !quizDoc.active) {
       return new Response(JSON.stringify({ error: 'Quiz is not active' }), { status: 400 });
-    }
-    
-    if (quizDoc.currentRound !== expectedRound) {
-      return new Response(JSON.stringify({ 
-        error: `Round ${expectedRound} is not currently active. Current active round is ${quizDoc.currentRound}` 
-      }), { status: 400 });
     }
     
     try {
@@ -68,8 +51,7 @@ export async function POST(req) {
         selectedOption,
         serverTimestamp,
         questionStartTimestamp,
-        responseTimeMs: responseTimeMs || 0,
-        round: expectedRound
+        responseTimeMs: responseTimeMs || 0
       };
       
       const result = await answers.insertOne(answerDoc);

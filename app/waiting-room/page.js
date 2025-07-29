@@ -197,14 +197,6 @@ export default function WaitingRoom() {
                     <span className="mr-1">📝</span>
                     {quizInfo.questionCount} Questions
                   </span>
-                  <span className="flex items-center">
-                    <span className="mr-1">🔄</span>
-                    {quizInfo.totalRounds} Rounds
-                  </span>
-                  <span className="flex items-center">
-                    <span className="mr-1">⏱️</span>
-                    {quizInfo.questionsPerRound} per Round
-                  </span>
                 </div>
                 <div className="text-center">
                   <p className="text-white/80 text-xs">

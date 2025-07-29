@@ -5,8 +5,7 @@ const adminToken = process.env.ADMIN_TOKEN;
 
 const createQuizSchema = z.object({
   name: z.string().min(1).max(100),
-  questionCount: z.number().min(5).max(50),
-  questionsPerRound: z.number().min(3).max(10)
+  questionCount: z.number().min(5).max(50)
 });
 
 export async function POST(req) {
@@ -25,7 +24,7 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Invalid input data' }), { status: 400 });
     }
 
-    const { name, questionCount, questionsPerRound } = parsed.data;
+    const { name, questionCount } = parsed.data;
     
     const client = await clientPromise;
     const db = client.db();
@@ -33,10 +32,7 @@ export async function POST(req) {
     // Generate a unique quiz ID
     const quizId = `quiz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Calculate total rounds
-    const totalRounds = Math.ceil(questionCount / questionsPerRound);
-
-    // Create sample questions (you can modify this to use your own questions)
+    // Create sample questions
     const questions = [];
     for (let i = 1; i <= questionCount; i++) {
       questions.push({
@@ -52,23 +48,19 @@ export async function POST(req) {
       });
     }
 
-    // Create quiz document
+    // Create quiz document (no round fields)
     const quizDoc = {
       quizId,
       name,
       questionCount,
-      questionsPerRound,
-      totalRounds,
       questions,
       active: false,
-      currentRound: 1,
-      paused: false,
       createdAt: new Date(),
       createdBy: 'admin'
     };
 
     // Insert quiz into database
-    const result = await db.collection('quizzes').insertOne(quizDoc);
+    await db.collection('quizzes').insertOne(quizDoc);
 
     // After creating the new quiz, disable all previous quizzes
     await db.collection('quizzes').updateMany({ quizId: { $ne: quizId } }, { $set: { active: false } });
@@ -76,7 +68,7 @@ export async function POST(req) {
     return new Response(JSON.stringify({
       success: true,
       quizId,
-      message: `Quiz "${name}" created successfully with ${questionCount} questions in ${totalRounds} rounds`
+      message: `Quiz "${name}" created successfully with ${questionCount} questions.`
     }), { status: 201 });
 
   } catch (error) {

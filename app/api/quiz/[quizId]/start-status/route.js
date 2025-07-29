@@ -14,23 +14,16 @@ export async function GET(req, { params }) {
       return new Response(JSON.stringify({ active: false }), { status: 200 });
     }
     
-    // Ensure startedAt is a valid timestamp
-    const startedAt = quiz.startedAt ? new Date(quiz.startedAt).getTime() : Date.now();
-    const countdown = quiz.countdown || 5;
-    
-    console.log(`[start-status] Quiz is active. startedAt: ${startedAt}, countdown: ${countdown}`);
+    // Only return quizId, name, questionCount, questions, and active
     return new Response(
       JSON.stringify({ 
-        active: true, 
-        startedAt: startedAt, 
-        countdown: countdown,
-        currentRound: quiz.currentRound || 1,
-        totalRounds: quiz.totalRounds || 1
+        quizId: quiz.quizId,
+        name: quiz.name,
+        questionCount: quiz.questionCount,
+        questions: quiz.questions,
+        active: quiz.active
       }),
       { status: 200 }
     );
   } catch (err) {
-    console.error(`[start-status] Error for quizId ${quizId}:`, err);
-    return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
-  }
-} 
+    console.error(`

@@ -30,9 +30,6 @@ export async function POST(req, { params }) {
     
     // Prepare all answers for batch insertion with round information
     const answersToInsert = answers.map(answer => {
-      const questionIndex = questions.findIndex(q => q.id === answer.questionId);
-      const round = questionIndex >= 0 ? getCurrentRound(questionIndex, quizInfo.questionsPerRound) : 1;
-      
       return {
         userId,
         quizId,
@@ -40,8 +37,7 @@ export async function POST(req, { params }) {
         selectedOption: answer.selectedOption,
         questionStartTimestamp: answer.questionStartTimestamp,
         serverTimestamp: Date.now(),
-        responseTimeMs: answer.responseTimeMs,
-        round
+        responseTimeMs: answer.responseTimeMs
       };
     });
     

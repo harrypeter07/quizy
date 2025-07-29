@@ -25,23 +25,15 @@ export async function POST(req, { params }) {
     
     // Get current timestamp for startedAt
     const startedAt = new Date();
-    const roundStartTime = Date.now();
     
-    // Ensure only one quiz is active at a time (optional, uncomment if needed)
-    // await db.collection('quizzes').updateMany({}, { $set: { active: false } });
-
     // Update quiz status with proper timestamp and start first round
     const updateResult = await db.collection('quizzes').updateOne(
       { quizId },
       { 
         $set: { 
           active: true, 
-          paused: false,
-          currentRound: 1,
           startedAt: startedAt,
-          roundStartTime: roundStartTime,
-          countdown: 5, // 5 second countdown before quiz starts
-          stoppedAt: null // clear stoppedAt if present
+          stoppedAt: null
         }
       }
     );
@@ -51,12 +43,9 @@ export async function POST(req, { params }) {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: 'Quiz started successfully with Round 1 active',
+      message: 'Quiz started successfully',
       quizId,
-      currentRound: 1,
-      startedAt: startedAt.getTime(),
-      roundStartTime: roundStartTime,
-      countdown: 5
+      startedAt: startedAt.getTime()
     }), { status: 200 });
     
   } catch (error) {

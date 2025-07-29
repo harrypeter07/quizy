@@ -173,7 +173,7 @@ export default function Onboarding() {
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-white/20">
                 <p className="text-white font-bold text-lg mb-1">{quizInfo.name}</p>
                 <div className="text-white/90 text-sm space-y-1">
-                  <p>{quizInfo.questionCount} Questions • {quizInfo.totalRounds} Rounds</p>
+                  <p>{quizInfo.questionCount} Questions</p>
                   <p className="text-white/80 text-xs">
                     Created: {quizInfo.formattedCreatedAt}
                   </p>

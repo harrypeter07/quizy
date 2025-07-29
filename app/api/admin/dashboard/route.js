@@ -41,10 +41,8 @@ export async function GET(req) {
         id: quiz.quizId,
         name: quiz.name, // Use actual name from database
         questionCount: quiz.questionCount,
-        totalRounds: quiz.totalRounds,
-        questionsPerRound: quiz.questionsPerRound,
+        questions: quiz.questions, // Assuming questions are directly in the quiz object
         active: quiz.active || false,
-        startedAt: quiz.startedAt || null,
         userCount,
         answerCount,
         leaderboard: leaderboard?.entries || [],
