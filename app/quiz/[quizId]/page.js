@@ -76,9 +76,9 @@ export default function QuizPage() {
   }, [quizInfo?.questionsPerRound]);
 
   // Check if we should pause after this question
-  const shouldPauseAfterQuestionLocal = (questionIndex) => {
+  const shouldPauseAfterQuestionLocal = useCallback((questionIndex) => {
     return shouldPauseAfterQuestion(questionIndex, quizInfo?.questionsPerRound || 5);
-  };
+  }, [quizInfo?.questionsPerRound]);
 
   useEffect(() => {
     if (questions.length === 0 || isRoundPaused) return;
@@ -159,7 +159,7 @@ export default function QuizPage() {
     handleAnswer(idx, false);
   };
 
-  const handleAnswer = async (optionIdx, auto = false) => {
+  const handleAnswer = useCallback(async (optionIdx, auto = false) => {
     if (submitting) return;
     setSubmitting(true);
     clearInterval(timerRef.current);
@@ -254,7 +254,7 @@ export default function QuizPage() {
         submitAllAnswers();
       }
     }, 1200);
-  };
+  }, [submitting, questions, current, currentRound, quizId, getCurrentRoundLocal, shouldPauseAfterQuestionLocal, submitAnswer, submitAllAnswers]);
 
   const submitAnswer = async (answerData) => {
     const userId = Cookies.get('userId');

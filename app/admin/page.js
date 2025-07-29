@@ -444,6 +444,41 @@ export default function AdminPage() {
     }
   };
 
+  const handleValidateData = async () => {
+    setLoading(true);
+    setStatus('Validating quiz data...');
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/validate-data`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const { validationReport } = data;
+        
+        if (validationReport.issues.length === 0) {
+          setStatus('✅ Data validation passed! No issues found.');
+        } else {
+          const issueCount = validationReport.issues.reduce((sum, issue) => sum + issue.count, 0);
+          setStatus(`⚠️ Data validation found ${issueCount} issues across ${validationReport.issues.length} categories. Check console for details.`);
+          console.log('Data validation issues:', validationReport.issues);
+        }
+      } else {
+        const errorData = await res.json();
+        setStatus(`Data validation failed: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error validating data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
@@ -588,6 +623,13 @@ export default function AdminPage() {
                   className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
                 >
                   📊 Evaluate
+                </button>
+                <button
+                  onClick={handleValidateData}
+                  disabled={loading}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                >
+                  🔍 Validate Data
                 </button>
               </div>
             </div>
