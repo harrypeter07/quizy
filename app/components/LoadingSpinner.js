@@ -22,11 +22,25 @@ export default function LoadingSpinner({ message = "Loading...", size = "medium"
       </div>
       
       {/* Main Content */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/20 max-w-md w-full">
           <div className="flex flex-col items-center justify-center">
-            <div className={`${sizeClasses[size]} animate-spin rounded-full border-4 border-[#14134c]/20 border-t-[#14134c] mb-4`}></div>
-            <p className="text-[#14134c] font-semibold text-lg">{message}</p>
+            {/* Animated Spinner */}
+            <div className="relative mb-6">
+              <div className={`${sizeClasses[size]} animate-spin rounded-full border-4 border-[#14134c]/20 border-t-[#14134c]`}></div>
+              {/* Pulsing ring effect */}
+              <div className={`absolute inset-0 ${sizeClasses[size]} animate-ping rounded-full border-2 border-[#14134c]/30`}></div>
+            </div>
+            
+            {/* Message */}
+            <p className="text-[#14134c] font-semibold text-lg sm:text-xl text-center leading-relaxed">
+              {message}
+            </p>
+            
+            {/* Optional subtitle */}
+            <p className="text-[#14134c]/60 text-sm text-center mt-2">
+              Please wait while we process your request...
+            </p>
           </div>
         </div>
       </div>

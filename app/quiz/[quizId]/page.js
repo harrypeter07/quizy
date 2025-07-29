@@ -21,6 +21,7 @@ export default function QuizPage() {
   const [submittingAll, setSubmittingAll] = useState(false);
   const [clickedOptions, setClickedOptions] = useState(new Set()); // Prevent multiple clicks
   const [quizInfo, setQuizInfo] = useState(null);
+  const [userId, setUserId] = useState('');
   const timerRef = useRef();
   const questionStart = useRef(Date.now());
 
@@ -32,11 +33,75 @@ export default function QuizPage() {
       setQuestions(data.questions || []);
       setQuizInfo({ totalQuestions: data.questions?.length || 0 });
     }
+    
+    // Get user ID from cookies
+    const id = Cookies.get('userId');
+    setUserId(id);
   }, [quizId]);
+
+  // Check for quiz restart and reset progress
+  useEffect(() => {
+    const checkQuizRestart = async () => {
+      try {
+        const res = await fetch(`/api/quiz/${quizId}/quiz-info`);
+        if (res.ok) {
+          const quizData = await res.json();
+          const lastRestartAt = quizData.lastRestartAt;
+          
+          // Check if quiz was restarted after user started
+          const userStartTime = localStorage.getItem(`quiz_${quizId}_start_time`);
+          if (lastRestartAt && userStartTime) {
+            const restartTime = new Date(lastRestartAt).getTime();
+            const userStart = parseInt(userStartTime);
+            
+            if (restartTime > userStart) {
+              // Quiz was restarted, reset user progress
+              console.log('Quiz was restarted, resetting progress');
+              setCurrent(0);
+              setUserAnswers([]);
+              setSelected(null);
+              setClickedOptions(new Set());
+              setFeedback('');
+              setResponseTime(null);
+              setSubmitting(false);
+              setSubmittingAll(false);
+              
+              // Clear local storage for this quiz
+              localStorage.removeItem(`answers_${quizId}`);
+              localStorage.setItem(`quiz_${quizId}_start_time`, Date.now().toString());
+              
+              // Show restart notification
+              setFeedback('Quiz has been restarted! Starting from question 1.');
+              setTimeout(() => setFeedback(''), 3000);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking quiz restart:', error);
+      }
+    };
+
+    // Check for restart every 5 seconds
+    const interval = setInterval(checkQuizRestart, 5000);
+    checkQuizRestart(); // Check immediately
+
+    return () => clearInterval(interval);
+  }, [quizId]);
+
+  // Set start time when user begins quiz
+  useEffect(() => {
+    if (questions.length > 0 && current === 0) {
+      localStorage.setItem(`quiz_${quizId}_start_time`, Date.now().toString());
+    }
+  }, [questions.length, current, quizId]);
 
   // Handle answer selection
   const handleAnswer = useCallback(async (optionIdx, auto = false) => {
     if (submitting) return;
+    
+    // Add to clicked options to prevent multiple clicks
+    setClickedOptions(prev => new Set([...prev, optionIdx]));
+    setSelected(optionIdx);
     setSubmitting(true);
     clearInterval(timerRef.current);
 
@@ -70,6 +135,8 @@ export default function QuizPage() {
 
     setTimeout(() => {
       setSubmitting(false);
+      setSelected(null);
+      setClickedOptions(new Set());
       if (current < questions.length - 1) {
         setCurrent(c => c + 1);
       } else {
@@ -121,33 +188,119 @@ export default function QuizPage() {
   const q = questions[current];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="bg-white rounded-xl shadow-lg p-8 max-w-xl w-full">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-blue-800">Question {current + 1} of {quizInfo?.totalQuestions}</h2>
-          <div className="text-lg font-mono text-indigo-600 font-bold">{timer}s</div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/blue-paperboard-bg.jpg"
+          alt="Blue Paperboard Background"
+          fill
+          className="object-cover"
+          priority
+        />
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#14134c]/80 to-[#f8e0a0]/20"></div>
+      </div>
+
+      {/* User ID Badge - Top Right Corner */}
+      <div className="absolute top-4 right-4 z-20">
+        <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg border border-white/20">
+          <span className="text-sm font-mono text-[#14134c] font-semibold">
+            ID: {userId || 'Loading...'}
+          </span>
         </div>
-        <div className="mb-6">
-          <div className="text-lg font-semibold text-gray-800 mb-2">{q.text}</div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          {q.options.map((opt, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleAnswer(idx)}
-              disabled={selected !== null || submitting || clickedOptions.has(idx)}
-              className={`w-full py-4 px-4 rounded-lg border text-lg font-medium shadow transition-all duration-150
-                ${selected === idx ? 'bg-blue-600 text-white border-blue-700 scale-105' : 'bg-gray-50 text-gray-800 border-gray-200 hover:bg-blue-100'}
-                ${submitting || clickedOptions.has(idx) ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-        {feedback && <div className="mb-4 text-green-700 font-semibold text-center">{feedback}</div>}
-        {submittingAll && <LoadingSpinner message="Submitting answers..." />}
-        <div className="mt-6 text-center text-gray-500 text-sm">
-          Progress: {current + 1} / {quizInfo?.totalQuestions}
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 max-w-2xl w-full border border-white/20">
+          {/* Header with Progress */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div className="flex-1">
+              <h2 className="text-xl sm:text-2xl font-bold text-[#14134c] mb-2">
+                Question {current + 1} of {quizInfo?.totalQuestions}
+              </h2>
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-gradient-to-r from-[#14134c] to-[#f8e0a0] h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${((current + 1) / quizInfo?.totalQuestions) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+            {/* Timer */}
+            <div className={`text-2xl sm:text-3xl font-mono font-bold px-4 py-2 rounded-lg transition-all duration-300 ${
+              timer <= 5 ? 'bg-red-500 text-white animate-pulse' : 
+              timer <= 10 ? 'bg-yellow-500 text-white' : 
+              'bg-[#14134c] text-white'
+            }`}>
+              {timer}s
+            </div>
+          </div>
+
+          {/* Question */}
+          <div className="mb-8">
+            <div className="text-lg sm:text-xl font-semibold text-[#14134c] leading-relaxed">
+              {q.text}
+            </div>
+          </div>
+
+          {/* Options Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
+            {q.options.map((opt, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleAnswer(idx)}
+                disabled={submitting || clickedOptions.has(idx)}
+                className={`relative w-full py-4 px-4 rounded-xl border-2 text-base sm:text-lg font-medium shadow-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
+                  ${selected === idx 
+                    ? 'bg-gradient-to-r from-[#14134c] to-[#f8e0a0] text-white border-[#14134c] shadow-xl' 
+                    : 'bg-white/80 text-[#14134c] border-gray-200 hover:bg-[#f8e0a0]/20 hover:border-[#f8e0a0]'
+                  }
+                  ${submitting || clickedOptions.has(idx) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
+                  ${clickedOptions.has(idx) ? 'ring-2 ring-[#14134c] ring-opacity-50' : ''}
+                `}
+              >
+                {opt}
+                {/* Loading indicator for clicked option */}
+                {clickedOptions.has(idx) && (
+                  <div className="absolute top-2 right-2">
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Feedback Message */}
+          {feedback && (
+            <div className={`mb-6 p-4 border rounded-xl text-center ${
+              feedback.includes('restarted') 
+                ? 'bg-gradient-to-r from-purple-500/20 to-purple-600/20 border-purple-200' 
+                : 'bg-gradient-to-r from-green-500/20 to-green-600/20 border-green-200'
+            }`}>
+              <div className={`font-semibold text-lg ${
+                feedback.includes('restarted') ? 'text-purple-700' : 'text-green-700'
+              }`}>
+                {feedback.includes('restarted') && '🔄 '}{feedback}
+              </div>
+            </div>
+          )}
+
+          {/* Loading State for Final Submission */}
+          {submittingAll && (
+            <div className="mb-6 p-6 bg-gradient-to-r from-[#14134c]/10 to-[#f8e0a0]/10 border border-[#14134c]/20 rounded-xl text-center">
+              <div className="flex items-center justify-center space-x-3">
+                <div className="w-6 h-6 animate-spin rounded-full border-2 border-[#14134c]/30 border-t-[#14134c]"></div>
+                <span className="text-[#14134c] font-semibold text-lg">Submitting answers...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Progress Info */}
+          <div className="text-center text-[#14134c]/70 text-sm font-medium">
+            Progress: {current + 1} / {quizInfo?.totalQuestions} questions completed
+          </div>
         </div>
       </div>
     </div>

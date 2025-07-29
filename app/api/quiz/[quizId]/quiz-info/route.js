@@ -2,51 +2,39 @@ import clientPromise from '@/lib/db.js';
 import { z } from 'zod';
 
 export async function GET(req, { params }) {
+  const quizIdSchema = z.object({ quizId: z.string().min(1) });
+  const awaitedParams = await params;
+  const parseResult = quizIdSchema.safeParse(awaitedParams);
+  if (!parseResult.success) {
+    return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
+  }
+  const { quizId } = awaitedParams;
+
   try {
-    const quizIdSchema = z.object({ quizId: z.string().min(1) });
-    const awaitedParams = await params;
-    const parseResult = quizIdSchema.safeParse(awaitedParams);
-    if (!parseResult.success) {
-      return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
-    }
-    const { quizId } = awaitedParams;
-    
-    // Get quiz info from database
     const client = await clientPromise;
     const db = client.db();
     
-    const quizDoc = await db.collection('quizzes').findOne({ quizId });
+    const quiz = await db.collection('quizzes').findOne({ quizId });
     
-    if (!quizDoc) {
+    if (!quiz) {
       return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
     }
-    
-    // Format the creation time
-    const createdAt = new Date(quizDoc.createdAt);
-    const formattedTime = createdAt.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-    
-    // Only return quizId, name, questionCount, questions, and active
-    const quizInfo = {
-      id: quizDoc.quizId,
-      name: quizDoc.name, // Use actual name from database
-      questionCount: quizDoc.questionCount,
-      active: quizDoc.active || false,
-      createdAt: quizDoc.createdAt,
-      formattedCreatedAt: formattedTime,
-      createdBy: quizDoc.createdBy
-    };
-    
-    return new Response(JSON.stringify(quizInfo), { status: 200 });
+
+    return new Response(JSON.stringify({
+      quizId: quiz.quizId,
+      name: quiz.name,
+      active: quiz.active,
+      startedAt: quiz.startedAt,
+      stoppedAt: quiz.stoppedAt,
+      restartedAt: quiz.restartedAt,
+      lastRestartAt: quiz.lastRestartAt,
+      currentQuestion: quiz.currentQuestion,
+      questionCount: quiz.questions?.length || 0,
+      countdownStartAt: quiz.countdownStartAt
+    }), { status: 200 });
     
   } catch (error) {
-    console.error('Quiz info error:', error);
+    console.error(`[quiz-info] Error fetching quiz info for ${quizId}:`, error);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
   }
 } 

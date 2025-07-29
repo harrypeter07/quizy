@@ -179,11 +179,33 @@ export default function AdminPage() {
   };
 
   const handleQuizAction = async (action, quizId = selectedQuiz) => {
+    // Add confirmation for restart action
+    if (action === 'restart') {
+      const confirmed = window.confirm(
+        '⚠️ WARNING: This will restart the quiz from the first question!\n\n' +
+        '• All participants will be reset to question 1\n' +
+        '• All current answers will be cleared\n' +
+        '• Leaderboard will be reset\n\n' +
+        'Are you sure you want to restart the quiz?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    
     setLoading(true);
     setStatus(`${action} quiz...`);
     
     try {
-      const endpoint = action === 'start' ? 'start' : 'stop';
+      let endpoint;
+      if (action === 'start') endpoint = 'start';
+      else if (action === 'stop') endpoint = 'stop';
+      else if (action === 'restart') endpoint = 'restart';
+      else {
+        setStatus('Invalid action');
+        return;
+      }
+      
       const res = await fetch(`/api/admin/quiz/${quizId}/${endpoint}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${adminToken}` }
@@ -191,10 +213,15 @@ export default function AdminPage() {
       
       if (res.ok) {
         const data = await res.json();
-        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
+        if (action === 'restart') {
+          setStatus(`Quiz restarted successfully! Cleared ${data.clearedAnswers} answers, ${data.clearedLeaderboard} leaderboard entries`);
+        } else {
+          setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
+        }
         await fetchDashboardData(adminToken); // Refresh data
       } else {
-        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
+        const errorData = await res.json();
+        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} failed: ${errorData.error}`);
       }
     } catch (error) {
       setStatus(`Error ${action}ing quiz`);
@@ -452,6 +479,13 @@ export default function AdminPage() {
                   className="px-6 py-3 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:text-gray-600"
                 >
                   🚀 Start Quiz
+                </button>
+                <button
+                  onClick={() => handleQuizAction('restart')}
+                  disabled={!isQuizActive || loading}
+                  className="px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 text-white disabled:bg-gray-400 disabled:text-gray-600"
+                >
+                  🔄 Restart Quiz
                 </button>
                 <button
                   onClick={() => handleQuizAction('stop')}
@@ -759,6 +793,7 @@ export default function AdminPage() {
                 {dashboardData && selectedQuiz && (
                   <div className="flex flex-col sm:flex-row gap-3 mb-4">
                     <button onClick={() => handleQuizAction('start')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{isQuizActive ? '✅ Quiz Started' : '🚀 Start Quiz'}</button>
+                    <button onClick={() => handleQuizAction('restart')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-purple-500 hover:bg-purple-600 text-white disabled:bg-gray-400 disabled:text-gray-600">🔄 Restart Quiz</button>
                     <button onClick={() => handleQuizAction('stop')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-red-500 hover:bg-red-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}</button>
 
                     <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Calculate Scores</button>
