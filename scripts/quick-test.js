@@ -30,7 +30,7 @@ async function quickTest() {
   // Test 1: Check if server is reachable
   try {
     console.log('🔍 Testing server connectivity...');
-    const healthCheck = await axios.get(`${config.baseUrl}/api/test/load-test`);
+    const healthCheck = await axios.get(`${config.baseUrl}/api/quiz/default/quiz-info`);
     console.log('✅ Server is reachable');
   } catch (error) {
     console.log('❌ Server is not reachable');

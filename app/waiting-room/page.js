@@ -67,12 +67,16 @@ export default function WaitingRoom() {
         if (data.active) {
           setStarted(true);
           setLoading(false);
-          const countdownTime = Math.max(0, Math.floor((data.startedAt + (data.countdown || 0) * 1000 - Date.now()) / 1000));
+          
+          // Ensure we have valid timestamps for countdown calculation
+          const startedAt = data.startedAt || Date.now();
+          const countdown = data.countdown || 5;
+          const countdownTime = Math.max(0, Math.floor((startedAt + countdown * 1000 - Date.now()) / 1000));
           setCountdown(countdownTime);
           
           interval = setInterval(() => {
             if (!isMounted) return;
-            const timeLeft = Math.max(0, Math.floor((data.startedAt + (data.countdown || 0) * 1000 - Date.now()) / 1000));
+            const timeLeft = Math.max(0, Math.floor((startedAt + countdown * 1000 - Date.now()) / 1000));
             setCountdown(timeLeft);
             if (timeLeft <= 0) {
               clearInterval(interval);

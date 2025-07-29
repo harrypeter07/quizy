@@ -19,8 +19,10 @@ export async function POST(req) {
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400 });
     }
+    
     const { userId, quizId, questionId, selectedOption, questionStartTimestamp, responseTimeMs, round } = parsed.data;
     const serverTimestamp = Date.now();
+    
     const client = await clientPromise;
     const db = client.db();
     const answers = db.collection('answers');
@@ -46,6 +48,7 @@ export async function POST(req) {
     
     // Check if quiz is active and current round matches
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
+    
     if (!quizDoc || !quizDoc.active) {
       return new Response(JSON.stringify({ error: 'Quiz is not active' }), { status: 400 });
     }
@@ -58,7 +61,7 @@ export async function POST(req) {
     
     try {
       // Try to insert new answer (will fail if duplicate due to unique index)
-      const result = await answers.insertOne({
+      const answerDoc = {
         userId,
         quizId,
         questionId,
@@ -67,7 +70,9 @@ export async function POST(req) {
         questionStartTimestamp,
         responseTimeMs: responseTimeMs || 0,
         round: expectedRound
-      });
+      };
+      
+      const result = await answers.insertOne(answerDoc);
       
       return new Response(JSON.stringify({ 
         status: 'ok', 
@@ -92,7 +97,7 @@ export async function POST(req) {
       }), { status: 500 });
     }
   } catch (err) {
-    console.error(err);
+    console.error('Submit route error:', err);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
   }
 } 

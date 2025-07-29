@@ -11,11 +11,11 @@ export default function AdminPage() {
   const [selectedQuiz, setSelectedQuiz] = useState('default');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [roundStatus, setRoundStatus] = useState(null);
+  const [roundProgress, setRoundProgress] = useState(null);
   const [leaderboardData, setLeaderboardData] = useState(null);
   const [leaderboardLimit, setLeaderboardLimit] = useState(10);
   const [leaderboardType, setLeaderboardType] = useState('full');
   const [selectedRound, setSelectedRound] = useState(1);
-  const [roundProgressData, setRoundProgressData] = useState(null);
   const [autoTransitionEnabled, setAutoTransitionEnabled] = useState(false);
   const [showCreateQuiz, setShowCreateQuiz] = useState(false);
   const [newQuizData, setNewQuizData] = useState({
@@ -38,23 +38,35 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchRoundStatus();
+    if (selectedQuiz && isAuthenticated) {
+      fetchDashboardData(adminToken);
       fetchUserCount();
-      fetchCurrentQuizInfo();
+      fetchRoundStatus();
+      fetchRoundProgress();
     }
-  }, [selectedQuiz, isAuthenticated]);
+  }, [selectedQuiz, isAuthenticated, adminToken]);
 
-  // Auto refresh user count every 5 seconds
+  // Auto refresh user count every 10 seconds (reduced frequency)
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !selectedQuiz) return;
     
     const interval = setInterval(() => {
       fetchUserCount();
-    }, 5000);
+    }, 10000);
     
     return () => clearInterval(interval);
   }, [isAuthenticated, selectedQuiz]);
+
+  // Auto refresh round progress every 5 seconds when quiz is active
+  useEffect(() => {
+    if (!isAuthenticated || !selectedQuiz || roundProgress?.roundStatus !== 'active') return;
+    
+    const interval = setInterval(() => {
+      fetchRoundProgress();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, selectedQuiz, roundProgress?.roundStatus]);
 
   // Auto transition check interval
   useEffect(() => {
@@ -112,11 +124,25 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`);
       if (res.ok) {
-        const status = await res.json();
-        setRoundStatus(status);
+        const data = await res.json();
+        setRoundStatus(data);
       }
     } catch (error) {
       console.error('Error fetching round status:', error);
+    }
+  };
+
+  const fetchRoundProgress = async () => {
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRoundProgress(data);
+      }
+    } catch (error) {
+      console.error('Error fetching round progress:', error);
     }
   };
 
@@ -140,6 +166,7 @@ export default function AdminPage() {
         }
         await fetchDashboardData(adminToken); // Refresh data
         await fetchRoundStatus(); // Refresh round status
+        await fetchRoundProgress(); // Refresh round progress
       } else {
         setStatus(`${action} failed`);
       }
@@ -164,6 +191,7 @@ export default function AdminPage() {
       if (res.ok) {
         setStatus(`Round ${action} successful!`);
         await fetchRoundStatus(); // Refresh round status
+        await fetchRoundProgress(); // Refresh round progress
       } else {
         setStatus(`Round ${action} failed`);
       }
@@ -192,6 +220,7 @@ export default function AdminPage() {
         const data = await res.json();
         setStatus(`Round ${round} evaluation complete! Top 10 participants identified. Avg score: ${data.stats.averageScore}`);
         await fetchDashboardData(adminToken); // Refresh data
+        await fetchRoundProgress(); // Refresh round progress
       } else {
         setStatus(`Round ${round} evaluation failed`);
       }
@@ -264,30 +293,6 @@ export default function AdminPage() {
     window.URL.revokeObjectURL(url);
     
     setStatus('Leaderboard exported successfully!');
-  };
-
-  const fetchRoundProgress = async (round = selectedRound) => {
-    setLoading(true);
-    setStatus('Loading round progress...');
-    
-    try {
-      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress?round=${round}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setRoundProgressData(data);
-        setStatus(`Round ${round} progress loaded`);
-      } else {
-        const errorData = await res.json();
-        setStatus(`Failed to load progress: ${errorData.error}`);
-      }
-    } catch (error) {
-      setStatus('Error loading round progress');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleAutoTransition = async () => {
@@ -380,16 +385,23 @@ export default function AdminPage() {
   const fetchUserCount = async () => {
     try {
       if (selectedQuiz) {
+        console.log('Fetching user count for quiz:', selectedQuiz);
         const res = await fetch(`/api/admin/quiz/${selectedQuiz}/user-count`, {
           headers: { 'Authorization': `Bearer ${adminToken}` }
         });
         if (res.ok) {
           const data = await res.json();
           setUserCountData(data);
+          console.log('User count updated successfully');
+        } else {
+          console.error('User count fetch failed:', res.status, res.statusText);
+          const errorData = await res.json().catch(() => ({}));
+          console.error('Error details:', errorData);
         }
       }
     } catch (error) {
       console.error('Error fetching user count:', error);
+      // Don't show error to user for background polling
     }
   };
 
@@ -419,7 +431,8 @@ export default function AdminPage() {
         fetchDashboardData(adminToken),
         fetchCurrentQuizInfo(),
         fetchUserCount(),
-        fetchRoundStatus()
+        fetchRoundStatus(),
+        fetchRoundProgress()
       ]);
       
       setStatus('Quiz details refreshed successfully!');
@@ -519,13 +532,18 @@ export default function AdminPage() {
                     Created: {currentQuizInfo.formattedCreatedAt}
                   </span>
                 </div>
-                {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active && (
-                  <div className="mt-3">
+                {/* Quiz Status Display */}
+                <div className="mt-3">
+                  {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? (
                     <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                      🟢 Active Quiz
+                      🟢 Quiz Started
                     </span>
-                  </div>
-                )}
+                  ) : (
+                    <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      🔴 Quiz Stopped
+                    </span>
+                  )}
+                </div>
               </div>
               
               <div className="flex flex-col sm:flex-row gap-3">
@@ -544,19 +562,30 @@ export default function AdminPage() {
                 </button>
                 <button
                   onClick={() => handleQuizAction('start')}
-                  className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                  disabled={dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active || loading}
+                  className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+                    dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-green-500 hover:bg-green-600 text-white'
+                  }`}
                 >
-                  🚀 Start Quiz
+                  {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '✅ Quiz Started' : '🚀 Start Quiz'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('stop')}
-                  className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                  disabled={!dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active || loading}
+                  className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+                    !dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
                 >
-                  ⏹️ Stop Quiz
+                  {!dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('evaluate')}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                  disabled={loading}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
                 >
                   📊 Evaluate
                 </button>
@@ -800,91 +829,201 @@ export default function AdminPage() {
 
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
-                {/* Current Quiz Status */}
-                {roundStatus && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-green-900 mb-3">Current Quiz Status</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-green-700 font-medium">Quiz:</span>
-                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.name}</span>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Round:</span>
-                        <span className="ml-2 font-semibold">{roundStatus.currentRound} of {roundStatus.totalRounds || 3}</span>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Status:</span>
-                        <span className={`ml-2 font-semibold ${roundStatus.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                          {roundStatus.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Paused:</span>
-                        <span className={`ml-2 font-semibold ${roundStatus.isPaused ? 'text-orange-600' : 'text-green-600'}`}>
-                          {roundStatus.isPaused ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Users:</span>
-                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.userCount || 0}</span>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Answers:</span>
-                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.answerCount || 0}</span>
+                {/* Current Round Information */}
+                {roundProgress && (
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold text-blue-900">
+                        Round {roundProgress.currentRound} Status
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={fetchRoundProgress}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          🔄 Refresh
+                        </button>
+                        <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          roundProgress.roundStatus === 'active' ? 'bg-green-100 text-green-800' :
+                          roundProgress.roundStatus === 'paused' ? 'bg-orange-100 text-orange-800' :
+                          roundProgress.roundStatus === 'completed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {roundProgress.roundStatus === 'active' ? '🟢 Active' :
+                           roundProgress.roundStatus === 'paused' ? '🟡 Paused' :
+                           roundProgress.roundStatus === 'completed' ? '✅ Completed' :
+                           '⚪ Inactive'}
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* Round Timing */}
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-blue-800">⏱️ Round Timing</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Started:</span>
+                            <span className="font-medium">{roundProgress.roundStartTimeFormatted}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Duration:</span>
+                            <span className="font-medium">{roundProgress.roundDurationFormatted}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Status:</span>
+                            <span className="font-medium capitalize">{roundProgress.roundStatus}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* User Participation */}
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-blue-800">👥 User Participation</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Total Users:</span>
+                            <span className="font-medium">{roundProgress.totalUsers}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Users Answered:</span>
+                            <span className="font-medium">{roundProgress.usersWithAnswers}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Completion:</span>
+                            <span className={`font-medium ${
+                              roundProgress.completionPercentage >= 90 ? 'text-green-600' :
+                              roundProgress.completionPercentage >= 70 ? 'text-orange-600' :
+                              'text-red-600'
+                            }`}>
+                              {roundProgress.completionPercentage}%
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              roundProgress.completionPercentage >= 90 ? 'bg-green-500' :
+                              roundProgress.completionPercentage >= 70 ? 'bg-orange-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${roundProgress.completionPercentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Evaluation Status */}
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-blue-800">📊 Evaluation Status</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Can Evaluate:</span>
+                            <span className={`font-medium ${roundProgress.canEvaluate ? 'text-green-600' : 'text-gray-500'}`}>
+                              {roundProgress.canEvaluate ? '✅ Yes' : '❌ No'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Ready for Eval:</span>
+                            <span className={`font-medium ${roundProgress.evaluationReady ? 'text-green-600' : 'text-gray-500'}`}>
+                              {roundProgress.evaluationReady ? '✅ Yes' : '❌ No'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Threshold:</span>
+                            <span className="font-medium">80% for eval, 90% for ready</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    {roundProgress.roundStatus === 'active' && (
+                      <div className="mt-6 pt-4 border-t border-blue-200">
+                        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <p className="text-green-800 font-medium">
+                            🟢 Round {roundProgress.currentRound} is currently ACTIVE - Users can submit answers
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            onClick={() => handleRoundAction('pause-round')}
+                            className="bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
+                          >
+                            ⏸️ Pause Round
+                          </button>
+                          {roundProgress.canEvaluate && (
+                            <button
+                              onClick={() => handleRoundEvaluation(roundProgress.currentRound)}
+                              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                            >
+                              📊 Evaluate Round {roundProgress.currentRound}
+                            </button>
+                          )}
+                          {roundProgress.evaluationReady && (
+                            <div className="bg-green-100 border border-green-300 rounded-lg px-4 py-2">
+                              <p className="text-green-800 font-medium">
+                                🎉 Round {roundProgress.currentRound} is ready for evaluation! 
+                                All users have completed their answers.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {roundProgress.roundStatus === 'paused' && (
+                      <div className="mt-6 pt-4 border-t border-blue-200">
+                        <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <p className="text-orange-800 font-medium">
+                            🟡 Round {roundProgress.currentRound} is currently PAUSED - Users cannot submit answers
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            onClick={() => handleRoundAction('resume-round')}
+                            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
+                          >
+                            ▶️ Resume Round
+                          </button>
+                          <button
+                            onClick={() => handleRoundEvaluation(roundProgress.currentRound)}
+                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                          >
+                            📊 Evaluate Round {roundProgress.currentRound}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {roundProgress.roundStatus === 'completed' && (
+                      <div className="mt-6 pt-4 border-t border-blue-200">
+                        <div className="bg-blue-100 border border-blue-300 rounded-lg px-4 py-3">
+                          <p className="text-blue-800 font-medium">
+                            ✅ Round {roundProgress.currentRound} completed successfully! 
+                            You can now evaluate the results or start the next round.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Main Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button
-                    onClick={() => handleQuizAction('start')}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
-                  >
-                    Start Quiz
-                  </button>
-                  <button
-                    onClick={() => handleQuizAction('stop')}
-                    className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-semibold"
-                  >
-                    Stop Quiz
-                  </button>
-                  <button
-                    onClick={() => handleQuizAction('evaluate')}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
-                  >
-                    Evaluate Quiz
-                  </button>
+                {/* Quiz Status Information */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <h3 className="text-lg font-semibold text-blue-900 mb-2">Quiz Control</h3>
+                  <p className="text-sm text-blue-700 mb-3">
+                    Use the Start/Stop buttons in the main header above to control the quiz.
+                  </p>
+                  <div className="text-sm text-blue-600">
+                    <p>• Quiz Status: {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '🟢 Active' : '🔴 Inactive'}</p>
+                    <p>• Current Round: {roundStatus?.currentRound || 1}</p>
+                    <p>• Total Rounds: {roundStatus?.totalRounds || 1}</p>
+                  </div>
                 </div>
 
-                {/* Round Actions */}
-                {roundStatus && roundStatus.isActive && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-yellow-900 mb-3">Round {roundStatus.currentRound} Actions</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <button
-                        onClick={() => handleRoundAction('pause-round')}
-                        className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
-                      >
-                        Pause Round
-                      </button>
-                      <button
-                        onClick={() => handleRoundEvaluation(roundStatus.currentRound)}
-                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                      >
-                        Evaluate Round {roundStatus.currentRound}
-                      </button>
-                      <button
-                        onClick={handleAutoTransition}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-                      >
-                        Auto Transition
-                      </button>
-                    </div>
-                  </div>
-                )}
+
 
                 {/* Auto Transition Toggle */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -1113,20 +1252,11 @@ export default function AdminPage() {
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold">Round Progress Tracking</h2>
                   <div className="flex space-x-2">
-                    <select
-                      value={selectedRound}
-                      onChange={(e) => setSelectedRound(parseInt(e.target.value))}
-                      className="border rounded px-3 py-2"
-                    >
-                      {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
-                        <option key={round} value={round}>Round {round}</option>
-                      ))}
-                    </select>
                     <button
-                      onClick={() => fetchRoundProgress()}
+                      onClick={fetchRoundProgress}
                       className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                     >
-                      Load Progress
+                      Refresh Progress
                     </button>
                     <button
                       onClick={handleAutoTransition}
@@ -1137,148 +1267,121 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {roundProgressData ? (
+                {roundProgress ? (
                   <div className="space-y-6">
                     {/* Round Statistics */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h3 className="text-lg font-semibold text-blue-900 mb-3">Round {selectedRound} Statistics</h3>
+                      <h3 className="text-lg font-semibold text-blue-900 mb-3">Round {roundProgress.currentRound} Statistics</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
-                          <span className="text-blue-700">Total Questions:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.totalQuestions}</span>
+                          <span className="text-blue-700">Status:</span>
+                          <span className="ml-2 font-semibold capitalize">{roundProgress.roundStatus}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Total Answers:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.totalAnswers}</span>
+                          <span className="text-blue-700">Total Users:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.totalUsers}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Unique Users:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.uniqueUsers}</span>
+                          <span className="text-blue-700">Users Answered:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.usersWithAnswers}</span>
                         </div>
                         <div>
                           <span className="text-blue-700">Completion:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.completionPercentage}%</span>
+                          <span className="ml-2 font-semibold">{roundProgress.completionPercentage}%</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Questions with Answers:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.questionsWithAnswers}</span>
+                          <span className="text-blue-700">Duration:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.roundDurationFormatted}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Questions without Answers:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.questionsWithoutAnswers}</span>
+                          <span className="text-blue-700">Can Evaluate:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.canEvaluate ? 'Yes' : 'No'}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Avg Answers per Question:</span>
-                          <span className="ml-2 font-semibold">{roundProgressData.roundStats.averageAnswersPerQuestion}</span>
+                          <span className="text-blue-700">Ready for Eval:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.evaluationReady ? 'Yes' : 'No'}</span>
                         </div>
                         <div>
-                          <span className="text-blue-700">Generated:</span>
-                          <span className="ml-2 font-semibold">{new Date(roundProgressData.generatedAt).toLocaleTimeString()}</span>
+                          <span className="text-blue-700">Started:</span>
+                          <span className="ml-2 font-semibold">{roundProgress.roundStartTimeFormatted}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Question Progress */}
-                    <div className="bg-white border rounded-lg overflow-hidden">
-                      <div className="px-6 py-4 border-b">
-                        <h3 className="text-lg font-semibold">Question Progress</h3>
+                    {/* Progress Visualization */}
+                    <div className="bg-white border rounded-lg p-6">
+                      <h3 className="text-lg font-semibold mb-4">Progress Visualization</h3>
+                      
+                      {/* Completion Progress Bar */}
+                      <div className="mb-6">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium text-gray-700">Completion Progress</span>
+                          <span className="text-sm font-semibold text-blue-600">{roundProgress.completionPercentage}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-4">
+                          <div 
+                            className={`h-4 rounded-full transition-all duration-300 ${
+                              roundProgress.completionPercentage >= 90 ? 'bg-green-500' :
+                              roundProgress.completionPercentage >= 70 ? 'bg-orange-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${roundProgress.completionPercentage}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>0%</span>
+                          <span>50%</span>
+                          <span>100%</span>
+                        </div>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Question</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Total Answers</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Unique Users</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Avg Response Time</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Answer Distribution</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {roundProgressData.questionProgress.map((question, index) => (
-                              <tr key={question.questionId} className="border-b border-gray-100">
-                                <td className="px-4 py-3">
-                                  <div className="text-sm">
-                                    <div className="font-medium text-gray-900">{index + 1}. {question.questionText}</div>
-                                    <div className="text-gray-500">ID: {question.questionId}</div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="font-semibold text-blue-600">{question.totalAnswers}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="font-semibold text-green-600">{question.uniqueUsersAnswered}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="text-gray-700">{question.averageResponseTime ? `${(question.averageResponseTime / 1000).toFixed(1)}s` : 'N/A'}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <div className="text-xs">
-                                    {Object.entries(question.answerDistribution).map(([option, count]) => (
-                                      <div key={option} className="text-gray-600">
-                                        Option {String.fromCharCode(65 + parseInt(option))}: {count}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
 
-                    {/* User Progress */}
-                    <div className="bg-white border rounded-lg overflow-hidden">
-                      <div className="px-6 py-4 border-b">
-                        <h3 className="text-lg font-semibold">User Progress</h3>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">User</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Questions Answered</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Completion</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Avg Response Time</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Last Answered</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {roundProgressData.userProgress.map((user) => (
-                              <tr key={user.userId} className="border-b border-gray-100">
-                                <td className="px-4 py-3">
-                                  <div>
-                                    <div className="font-semibold text-gray-900">{user.displayName}</div>
-                                    <div className="text-sm text-gray-500">#{user.uniqueId}</div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="font-semibold text-blue-600">{user.questionsAnswered}/{user.totalQuestions}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <div className="flex items-center justify-center">
-                                    <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                                      <div 
-                                        className="bg-green-600 h-2 rounded-full" 
-                                        style={{ width: `${user.completionPercentage}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-sm font-semibold text-green-600">{user.completionPercentage}%</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="text-gray-700">{user.averageResponseTime ? `${(user.averageResponseTime / 1000).toFixed(1)}s` : 'N/A'}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="text-sm text-gray-600">
-                                    {user.lastAnsweredAt ? new Date(user.lastAnsweredAt).toLocaleTimeString() : 'Never'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      {/* Status Indicators */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className={`p-4 rounded-lg border-2 ${
+                          roundProgress.roundStatus === 'active' ? 'border-green-200 bg-green-50' :
+                          roundProgress.roundStatus === 'paused' ? 'border-orange-200 bg-orange-50' :
+                          'border-gray-200 bg-gray-50'
+                        }`}>
+                          <div className="flex items-center">
+                            <div className={`w-3 h-3 rounded-full mr-3 ${
+                              roundProgress.roundStatus === 'active' ? 'bg-green-500' :
+                              roundProgress.roundStatus === 'paused' ? 'bg-orange-500' :
+                              'bg-gray-500'
+                            }`}></div>
+                            <div>
+                              <div className="font-semibold text-gray-900">Round Status</div>
+                              <div className="text-sm text-gray-600 capitalize">{roundProgress.roundStatus}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={`p-4 rounded-lg border-2 ${
+                          roundProgress.canEvaluate ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-gray-50'
+                        }`}>
+                          <div className="flex items-center">
+                            <div className={`w-3 h-3 rounded-full mr-3 ${
+                              roundProgress.canEvaluate ? 'bg-purple-500' : 'bg-gray-500'
+                            }`}></div>
+                            <div>
+                              <div className="font-semibold text-gray-900">Can Evaluate</div>
+                              <div className="text-sm text-gray-600">{roundProgress.canEvaluate ? 'Yes' : 'No'}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={`p-4 rounded-lg border-2 ${
+                          roundProgress.evaluationReady ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                        }`}>
+                          <div className="flex items-center">
+                            <div className={`w-3 h-3 rounded-full mr-3 ${
+                              roundProgress.evaluationReady ? 'bg-green-500' : 'bg-gray-500'
+                            }`}></div>
+                            <div>
+                              <div className="font-semibold text-gray-900">Ready for Eval</div>
+                              <div className="text-sm text-gray-600">{roundProgress.evaluationReady ? 'Yes' : 'No'}</div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1287,10 +1390,10 @@ export default function AdminPage() {
                     <div className="text-6xl mb-4">📊</div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No Progress Data</h3>
                     <p className="text-gray-600 mb-4">
-                      Select a round and click &quot;Load Progress&quot; to view detailed progress information.
+                      Click &quot;Refresh Progress&quot; to view current round progress information.
                     </p>
                     <p className="text-sm text-gray-500">
-                      This will show you which questions have been answered and by whom.
+                      This will show you the current round status and completion progress.
                     </p>
                   </div>
                 )}

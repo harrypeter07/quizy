@@ -33,6 +33,9 @@ export async function POST(req, { params }) {
       }), { status: 404 });
     }
     
+    // Get questions for this quiz
+    const questions = getQuestions(quizId);
+    
     // Validate data integrity
     const validationErrors = [];
     

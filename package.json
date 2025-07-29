@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test:quick": "node scripts/quick-test.js",
-    "test:load": "node scripts/load-test.js"
+    "test:load": "node scripts/load-test.js",
+    "test:500-round1": "node scripts/500-users-round1-test.js",
+    "test:real-api": "node scripts/real-api-test.js",
+    "test:simple": "node scripts/simple-test.js"
   },
   "dependencies": {
     "react": "19.1.0",
@@ -18,7 +21,8 @@
     "uuid": "^9.0.1",
     "zod": "^3.22.4",
     "mongodb": "^6.3.0",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -21,7 +21,11 @@ export async function POST(req, { params }) {
     const client = await clientPromise;
     const db = client.db();
     
-    // Update quiz status
+    // Get current timestamp for startedAt
+    const startedAt = new Date();
+    const roundStartTime = Date.now();
+    
+    // Update quiz status with proper timestamp and start first round
     await db.collection('quizzes').updateOne(
       { quizId },
       { 
@@ -29,16 +33,21 @@ export async function POST(req, { params }) {
           active: true, 
           currentRound: 1,
           paused: false,
-          startedAt: new Date()
+          startedAt: startedAt,
+          roundStartTime: roundStartTime,
+          countdown: 5 // 5 second countdown before quiz starts
         } 
       }
     );
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: 'Quiz started successfully',
+      message: 'Quiz started successfully with Round 1 active',
       quizId,
-      currentRound: 1
+      currentRound: 1,
+      startedAt: startedAt.getTime(),
+      roundStartTime: roundStartTime,
+      countdown: 5
     }), { status: 200 });
     
   } catch (error) {

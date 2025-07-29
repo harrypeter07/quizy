@@ -30,12 +30,23 @@ export async function GET(req, { params }) {
     const isQuizActive = quizDoc.active || false;
     const quizCreatedAt = new Date(quizDoc.createdAt).getTime();
     
-    // Get all users who joined AFTER this quiz was created
-    const allUsers = await db.collection('users').find({}).toArray();
-    const usersForThisQuiz = allUsers.filter(user => {
-      const userJoinedAt = new Date(user.createdAt).getTime();
-      return userJoinedAt >= quizCreatedAt;
-    });
+    // Use more efficient queries with aggregation pipeline
+    // Get users who joined AFTER this quiz was created using aggregation
+    const usersForThisQuiz = await db.collection('users').aggregate([
+      {
+        $match: {
+          createdAt: { $gte: new Date(quizCreatedAt) }
+        }
+      },
+      {
+        $project: {
+          userId: 1,
+          displayName: 1,
+          uniqueId: 1,
+          createdAt: 1
+        }
+      }
+    ]).toArray();
     
     // Get users who have answered questions in this quiz (active participants)
     const activeUsers = await db.collection('answers').distinct('userId', { quizId });

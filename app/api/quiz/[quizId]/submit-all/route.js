@@ -57,8 +57,6 @@ export async function POST(req, { params }) {
     }), { status: 200 });
     
   } catch (error) {
-    console.error('Batch submission error:', error);
-    
     if (error instanceof z.ZodError) {
       return new Response(JSON.stringify({
         error: 'Invalid input data',
@@ -75,6 +73,7 @@ export async function POST(req, { params }) {
       }), { status: 200 });
     }
     
+    console.error('Submit-all route error:', error);
     return new Response(JSON.stringify({ 
       error: 'Server error',
       message: 'Failed to submit answers'

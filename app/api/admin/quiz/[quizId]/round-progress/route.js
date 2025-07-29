@@ -1,5 +1,4 @@
 import clientPromise from '@/lib/db.js';
-import { getQuizInfo, getQuestionsForRound } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const adminToken = process.env.ADMIN_TOKEN;
@@ -9,7 +8,7 @@ export async function GET(req, { params }) {
   if (!token || token !== `Bearer ${adminToken}`) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
-  
+
   const quizIdSchema = z.object({ quizId: z.string().min(1) });
   const awaitedParams = await params;
   const parseResult = quizIdSchema.safeParse(awaitedParams);
@@ -17,100 +16,74 @@ export async function GET(req, { params }) {
     return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
   }
   const { quizId } = awaitedParams;
-  
+
   try {
-    const { searchParams } = new URL(req.url);
-    const round = parseInt(searchParams.get('round')) || 1;
-    
     const client = await clientPromise;
     const db = client.db();
     
-    // Get quiz info
-    const quizInfo = getQuizInfo(quizId);
-    
-    if (round < 1 || round > quizInfo.totalRounds) {
-      return new Response(JSON.stringify({ 
-        error: `Invalid round number. Must be between 1 and ${quizInfo.totalRounds}` 
-      }), { status: 400 });
+    // Get quiz information
+    const quiz = await db.collection('quizzes').findOne({ quizId });
+    if (!quiz) {
+      return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
     }
-    
-    // Get questions for this round
-    const questionsForRound = getQuestionsForRound(quizId, round, quizInfo.questionsPerRound);
-    
-    // Get all answers for this round
-    const answers = await db.collection('answers').find({ 
+
+    const currentRound = quiz.currentRound || 1;
+    const roundStartTime = quiz.roundStartTime;
+    const isActive = quiz.active || false;
+    const isPaused = quiz.paused || false;
+
+    // Get all users for this quiz
+    const users = await db.collection('users').find({ 
       quizId,
-      round: round
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
     }).toArray();
-    
-    // Get unique users who answered in this round
-    const uniqueUsers = await db.collection('answers').distinct('userId', {
+
+    // Get answers for current round
+    const answers = await db.collection('answers').find({
       quizId,
-      round: round
-    });
-    
-    // Calculate progress for each question
-    const questionProgress = questionsForRound.map(question => {
-      const questionAnswers = answers.filter(a => a.questionId === question.id);
-      const uniqueUsersForQuestion = [...new Set(questionAnswers.map(a => a.userId))];
-      
-      return {
-        questionId: question.id,
-        questionText: question.text,
-        totalAnswers: questionAnswers.length,
-        uniqueUsersAnswered: uniqueUsersForQuestion.length,
-        usersAnswered: uniqueUsersForQuestion,
-        answerDistribution: questionAnswers.reduce((acc, answer) => {
-          acc[answer.selectedOption] = (acc[answer.selectedOption] || 0) + 1;
-          return acc;
-        }, {}),
-        averageResponseTime: questionAnswers.length > 0 
-          ? questionAnswers.reduce((sum, a) => sum + (a.responseTimeMs || 0), 0) / questionAnswers.length 
-          : 0
-      };
-    });
-    
-    // Calculate round statistics
-    const roundStats = {
-      totalQuestions: questionsForRound.length,
-      totalAnswers: answers.length,
-      uniqueUsers: uniqueUsers.length,
-      completionPercentage: Math.round((answers.length / (questionsForRound.length * uniqueUsers.length)) * 100) || 0,
-      averageAnswersPerQuestion: Math.round(answers.length / questionsForRound.length) || 0,
-      questionsWithAnswers: questionProgress.filter(q => q.totalAnswers > 0).length,
-      questionsWithoutAnswers: questionProgress.filter(q => q.totalAnswers === 0).length
-    };
-    
-    // Get user progress for this round
-    const userProgress = uniqueUsers.map(userId => {
-      const userAnswers = answers.filter(a => a.userId === userId);
-      const user = userAnswers[0]; // Get user info from first answer
-      
-      return {
-        userId,
-        displayName: user?.displayName || 'Unknown',
-        uniqueId: user?.uniqueId || 'Unknown',
-        questionsAnswered: userAnswers.length,
-        totalQuestions: questionsForRound.length,
-        completionPercentage: Math.round((userAnswers.length / questionsForRound.length) * 100),
-        averageResponseTime: userAnswers.length > 0 
-          ? userAnswers.reduce((sum, a) => sum + (a.responseTimeMs || 0), 0) / userAnswers.length 
-          : 0,
-        lastAnsweredAt: userAnswers.length > 0 
-          ? Math.max(...userAnswers.map(a => a.serverTimestamp))
-          : null
-      };
-    });
-    
+      round: currentRound
+    }).toArray();
+
+    // Calculate completion statistics
+    const totalUsers = users.length;
+    const usersWithAnswers = new Set(answers.map(a => a.userId)).size;
+    const completionPercentage = totalUsers > 0 ? Math.round((usersWithAnswers / totalUsers) * 100) : 0;
+
+    // Calculate round duration
+    const roundDuration = roundStartTime ? Math.floor((Date.now() - roundStartTime) / 1000) : 0;
+    const roundDurationMinutes = Math.floor(roundDuration / 60);
+    const roundDurationSeconds = roundDuration % 60;
+
+    // Determine round status
+    let roundStatus = 'inactive';
+    if (isActive && !isPaused) {
+      roundStatus = 'active';
+    } else if (isActive && isPaused) {
+      roundStatus = 'paused';
+    } else if (!isActive && completionPercentage >= 90) {
+      roundStatus = 'completed';
+    }
+
+    // Format round start time
+    const roundStartTimeFormatted = roundStartTime ? new Date(roundStartTime).toLocaleString() : 'Not started';
+
     return new Response(JSON.stringify({
       quizId,
-      round,
-      roundStats,
-      questionProgress,
-      userProgress,
-      generatedAt: Date.now()
+      currentRound,
+      roundStatus,
+      roundStartTime: roundStartTime,
+      roundStartTimeFormatted,
+      roundDuration,
+      roundDurationFormatted: `${roundDurationMinutes}m ${roundDurationSeconds}s`,
+      totalUsers,
+      usersWithAnswers,
+      completionPercentage,
+      isActive,
+      isPaused,
+      canEvaluate: completionPercentage >= 80 && roundStatus === 'active', // Can evaluate if 80%+ completed
+      evaluationReady: completionPercentage >= 90 || roundStatus === 'completed' // Ready for evaluation if 90%+ completed
     }), { status: 200 });
-    
+
   } catch (error) {
     console.error('Round progress error:', error);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
