@@ -34,38 +34,6 @@ export default function QuizPage() {
     }
   }, [quizId]);
 
-  // Submit answer to backend
-  const submitAnswer = async (answerData) => {
-    try {
-      const userId = Cookies.get('userId');
-      await fetch(`/api/quiz/${quizId}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...answerData, userId, quizId })
-      });
-    } catch (error) {
-      console.error('Error submitting answer:', error);
-    }
-  };
-
-  // Submit all answers at the end
-  const submitAllAnswers = async () => {
-    setSubmittingAll(true);
-    try {
-      const userId = Cookies.get('userId');
-      await fetch(`/api/quiz/${quizId}/submit-all`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, quizId, answers: userAnswers })
-      });
-      router.push(`/quiz/${quizId}/waiting`);
-    } catch (error) {
-      console.error('Error submitting all answers:', error);
-    } finally {
-      setSubmittingAll(false);
-    }
-  };
-
   // Handle answer selection
   const handleAnswer = useCallback(async (optionIdx, auto = false) => {
     if (submitting) return;
@@ -88,17 +56,45 @@ export default function QuizPage() {
     setResponseTime(responseTimeMs);
     setFeedback(auto ? 'Time up! Answer recorded.' : 'Answer recorded!');
 
-    await submitAnswer(answerData);
+    // Submit answer to backend
+    try {
+      const userId = Cookies.get('userId');
+      await fetch(`/api/quiz/${quizId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...answerData, userId, quizId })
+      });
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+    }
 
     setTimeout(() => {
       setSubmitting(false);
       if (current < questions.length - 1) {
         setCurrent(c => c + 1);
       } else {
-        submitAllAnswers();
+        // Submit all answers at the end
+        setSubmittingAll(true);
+        try {
+          const userId = Cookies.get('userId');
+          fetch(`/api/quiz/${quizId}/submit-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, quizId, answers: [...userAnswers, answerData] })
+          }).then(() => {
+            router.push(`/quiz/${quizId}/waiting`);
+          }).catch((error) => {
+            console.error('Error submitting all answers:', error);
+          }).finally(() => {
+            setSubmittingAll(false);
+          });
+        } catch (error) {
+          console.error('Error submitting all answers:', error);
+          setSubmittingAll(false);
+        }
       }
     }, 1200);
-  }, [submitting, questions, current, submitAnswer, submitAllAnswers]);
+  }, [submitting, questions, current, quizId, userAnswers, router]);
 
   // Timer logic
   useEffect(() => {

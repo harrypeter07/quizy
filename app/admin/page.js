@@ -56,26 +56,7 @@ export default function AdminPage() {
     }
   }, [selectedQuiz]);
 
-  // Add fetchLeaderboard function
-  const fetchLeaderboard = useCallback(async () => {
-    if (!selectedQuiz) return;
-    setLeaderboardLoading(true);
-    try {
-      const res = await fetch(`/api/admin/leaderboard?quizId=${selectedQuiz}&limit=${leaderboardLimit}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboardData(data);
-      } else {
-        setLeaderboardData(null);
-      }
-    } catch (error) {
-      setLeaderboardData(null);
-    } finally {
-      setLeaderboardLoading(false);
-    }
-  }, [selectedQuiz, adminToken, leaderboardLimit]);
+
 
   // Remove all round-related state
   // Remove roundStatus, roundProgress, selectedRound, autoTransitionEnabled, and any round-based state
@@ -146,10 +127,29 @@ export default function AdminPage() {
 
   // Auto-load leaderboard when tab, quiz, or limit changes
   useEffect(() => {
-    if (activeTab === 'leaderboard' && selectedQuiz) {
-      fetchLeaderboard();
+    if (activeTab === 'leaderboard' && selectedQuiz && adminToken) {
+      // Call fetchLeaderboard directly to avoid dependency issues
+      const loadLeaderboard = async () => {
+        setLeaderboardLoading(true);
+        try {
+          const res = await fetch(`/api/admin/leaderboard?quizId=${selectedQuiz}&limit=${leaderboardLimit}`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setLeaderboardData(data);
+          } else {
+            setLeaderboardData(null);
+          }
+        } catch (error) {
+          setLeaderboardData(null);
+        } finally {
+          setLeaderboardLoading(false);
+        }
+      };
+      loadLeaderboard();
     }
-  }, [activeTab, selectedQuiz, leaderboardLimit, fetchLeaderboard]);
+  }, [activeTab, selectedQuiz, leaderboardLimit, adminToken]);
 
   const handleLogin = async () => {
     if (!adminToken.trim()) {
@@ -793,7 +793,25 @@ export default function AdminPage() {
                   <h2 className="text-xl font-semibold">Leaderboard Management</h2>
                   <div className="flex space-x-2">
                     <button
-                      onClick={fetchLeaderboard}
+                      onClick={async () => {
+                        if (!selectedQuiz) return;
+                        setLeaderboardLoading(true);
+                        try {
+                          const res = await fetch(`/api/admin/leaderboard?quizId=${selectedQuiz}&limit=${leaderboardLimit}`, {
+                            headers: { 'Authorization': `Bearer ${adminToken}` }
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setLeaderboardData(data);
+                          } else {
+                            setLeaderboardData(null);
+                          }
+                        } catch (error) {
+                          setLeaderboardData(null);
+                        } finally {
+                          setLeaderboardLoading(false);
+                        }
+                      }}
                       className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                       disabled={leaderboardLoading}
                     >
