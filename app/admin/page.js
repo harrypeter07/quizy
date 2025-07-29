@@ -947,8 +947,6 @@ export default function AdminPage() {
                               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Rank</th>
                               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Participant</th>
                               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Score</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Accuracy</th>
-                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Response Time</th>
                               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">Correct</th>
                             </tr>
                           </thead>
@@ -973,12 +971,6 @@ export default function AdminPage() {
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <span className="font-bold text-lg text-blue-600">{entry.score}</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="font-semibold text-green-600">{entry.accuracy?.toFixed(1)}%</span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="text-gray-700">{entry.averageResponseTime?.toFixed(0)}s</span>
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <span className="text-gray-700">{entry.correctAnswers}/{entry.totalQuestions}</span>
