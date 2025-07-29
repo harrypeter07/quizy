@@ -3,21 +3,19 @@ import { useState, useEffect } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Leaderboard() {
-  const [activeRound, setActiveRound] = useState(1);
   const [leaderboardData, setLeaderboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchRoundLeaderboard(activeRound);
-  }, [activeRound]);
+    fetchLeaderboard();
+  }, []);
 
-  const fetchRoundLeaderboard = async (round) => {
+  const fetchLeaderboard = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      const res = await fetch(`/api/leaderboard/round/${round}`);
+      const res = await fetch(`/api/leaderboard`);
       if (res.ok) {
         const data = await res.json();
         setLeaderboardData(data);
@@ -41,43 +39,9 @@ export default function Leaderboard() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 text-center mb-2">Round Leaderboard</h1>
-          <p className="text-gray-600 text-center">Top performers for each round</p>
+          <h1 className="text-3xl font-bold text-gray-900 text-center mb-2">Leaderboard</h1>
+          <p className="text-gray-600 text-center">Top performers for the quiz</p>
         </div>
-
-        {/* Round Tabs */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex justify-center space-x-4 mb-6">
-            {[1, 2, 3].map((round) => (
-              <button
-                key={round}
-                onClick={() => setActiveRound(round)}
-                className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-                  activeRound === round
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Round {round}
-              </button>
-            ))}
-          </div>
-
-          {/* Round Info */}
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Round {activeRound} Results</h2>
-            {leaderboardData && (
-              <div className="text-sm text-gray-600">
-                <p>Evaluated on: {new Date(leaderboardData.evaluatedAt).toLocaleString()}</p>
-                <p>Total participants: {leaderboardData.totalParticipants}</p>
-                {leaderboardData.stats && (
-                  <p>Average score: {leaderboardData.stats.averageScore?.toFixed(1) || 'N/A'}</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Leaderboard Content */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           {error ? (
@@ -86,7 +50,7 @@ export default function Leaderboard() {
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No Data Available</h3>
               <p className="text-gray-600 mb-4">{error}</p>
               <p className="text-sm text-gray-500">
-                Round {activeRound} may not have been evaluated yet by the admin.
+                The overall quiz leaderboard may not have been evaluated yet by the admin.
               </p>
             </div>
           ) : leaderboardData && leaderboardData.entries.length > 0 ? (
@@ -170,7 +134,7 @@ export default function Leaderboard() {
               <div className="text-6xl mb-4">🏆</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No Participants Yet</h3>
               <p className="text-gray-600">
-                No participants have completed Round {activeRound} yet.
+                No participants have completed the quiz yet.
               </p>
             </div>
           )}

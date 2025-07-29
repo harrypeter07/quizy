@@ -6,12 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test:quick": "node scripts/quick-test.js",
-    "test:load": "node scripts/load-test.js",
-    "test:500-round1": "node scripts/500-users-round1-test.js",
-    "test:real-api": "node scripts/real-api-test.js",
-    "test:simple": "node scripts/simple-test.js"
+    "lint": "next lint"
+   
   },
   "dependencies": {
     "react": "19.1.0",

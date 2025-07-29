@@ -13,10 +13,11 @@ export async function POST(req, { params }) {
     const client = await clientPromise;
     const db = client.db();
     
-    // Delete all quizzes, users, and answers for a fresh start
+    // Delete all quizzes, users, answers, and roundLeaderboard for a fresh start
     await db.collection('quizzes').deleteMany({});
     await db.collection('users').deleteMany({});
     await db.collection('answers').deleteMany({});
+    await db.collection('roundLeaderboard').deleteMany({});
     
     // Create unique index to prevent duplicate answer submissions
     await db.collection('answers').createIndex(

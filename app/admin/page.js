@@ -539,30 +539,30 @@ export default function AdminPage() {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600">{userCountData.totalUsers}</div>
+                    <div className="text-3xl font-bold text-blue-600">{userCountData.totalUsers ?? 0}</div>
                     <div className="text-sm text-gray-600">Total Users</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-green-600">{userCountData.waitingUsers}</div>
+                    <div className="text-3xl font-bold text-green-600">{userCountData.waitingUsers ?? 0}</div>
                     <div className="text-sm text-gray-600">In Waiting Room</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-orange-600">{userCountData.activeUsers}</div>
+                    <div className="text-3xl font-bold text-orange-600">{userCountData.activeUsers ?? 0}</div>
                     <div className="text-sm text-gray-600">Active Participants</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-purple-600">{userCountData.recentUsers}</div>
+                    <div className="text-3xl font-bold text-purple-600">{userCountData.recentUsers ?? 0}</div>
                     <div className="text-sm text-gray-600">Recently Joined</div>
                   </div>
                 </div>
                 
                 {/* User List */}
-                {userCountData.userList.length > 0 && (
+                {(userCountData.userList ?? []).length > 0 && (
                   <div className="mt-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-3">Users in Waiting Room</h3>
                     <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {userCountData.userList.map((user, index) => (
+                        {(userCountData.userList ?? []).map((user, index) => (
                           <div key={user.userId} className="flex items-center justify-between bg-white rounded-lg p-2 shadow-sm">
                             <div className="flex items-center">
                               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-sm mr-2">
@@ -581,7 +581,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="text-xs text-gray-500 mt-2 text-center">
-                      Last updated: {new Date(userCountData.lastUpdated).toLocaleTimeString()}
+                      Last updated: {userCountData.lastUpdated ? new Date(userCountData.lastUpdated).toLocaleTimeString() : '--'}
                     </div>
                   </div>
                 )}

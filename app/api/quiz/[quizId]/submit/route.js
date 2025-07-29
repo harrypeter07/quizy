@@ -1,5 +1,4 @@
 import clientPromise from '@/lib/db.js';
-import { getQuizInfo, getCurrentRound } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const submissionSchema = z.object({
@@ -18,30 +17,24 @@ export async function POST(req) {
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400 });
     }
-    
     const { userId, quizId, questionId, selectedOption, questionStartTimestamp, responseTimeMs } = parsed.data;
     const serverTimestamp = Date.now();
-    
+
     const client = await clientPromise;
     const db = client.db();
     const answers = db.collection('answers');
-    
-    // Get quiz info and validate question
-    const quizInfo = getQuizInfo(quizId);
-    const questions = quizInfo.questions;
-    const questionIndex = questions.findIndex(q => q.id === questionId);
-    
-    if (questionIndex === -1) {
-      return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
-    }
-    
-    // Check if quiz is active and current round matches
+
+    // Fetch quiz and questions from the database
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
-    
     if (!quizDoc || !quizDoc.active) {
       return new Response(JSON.stringify({ error: 'Quiz is not active' }), { status: 400 });
     }
-    
+    const questions = quizDoc.questions || [];
+    const questionIndex = questions.findIndex(q => q.id === questionId);
+    if (questionIndex === -1) {
+      return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
+    }
+
     try {
       // Try to insert new answer (will fail if duplicate due to unique index)
       const answerDoc = {
@@ -53,15 +46,12 @@ export async function POST(req) {
         questionStartTimestamp,
         responseTimeMs: responseTimeMs || 0
       };
-      
       const result = await answers.insertOne(answerDoc);
-      
       return new Response(JSON.stringify({ 
         status: 'ok', 
         serverTimestamp,
         insertedId: result.insertedId 
       }), { status: 201 });
-      
     } catch (error) {
       // Check if it's a duplicate key error
       if (error.code === 11000) {
@@ -70,7 +60,6 @@ export async function POST(req) {
           message: 'Answer already submitted for this question'
         }), { status: 409 });
       }
-      
       // Other database error
       console.error('Database error:', error);
       return new Response(JSON.stringify({ 

@@ -1,4 +1,4 @@
-import { getQuestions } from '@/lib/questions.js';
+import clientPromise from '@/lib/db.js';
 import { z } from 'zod';
 
 export async function GET(req, { params }) {
@@ -9,6 +9,12 @@ export async function GET(req, { params }) {
     return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
   }
   const { quizId } = awaitedParams;
-  const questions = getQuestions(quizId);
+  const client = await clientPromise;
+  const db = client.db();
+  const quizDoc = await db.collection('quizzes').findOne({ quizId });
+  if (!quizDoc) {
+    return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
+  }
+  const questions = quizDoc.questions || [];
   return new Response(JSON.stringify({ questions }), { status: 200 });
 } 
