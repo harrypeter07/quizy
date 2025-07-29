@@ -94,11 +94,39 @@ export default function WaitingRoom() {
         const data = await res.json();
         if (!isMounted) return;
         if (data.active) {
-          setStarted(true);
-          setLoading(false);
-          // Immediately redirect to quiz page
-          router.replace(`/quiz/${currentQuizId}`);
-          return;
+          if (data.quizIsStarted && data.countdownStartAt) {
+            // Calculate remaining countdown
+            const now = Date.now();
+            const countdownLeft = 5 - Math.floor((now - data.countdownStartAt) / 1000);
+            if (countdownLeft > 0) {
+              setStarted(true);
+              setCountdown(countdownLeft);
+              setLoading(false);
+              // Start interval to update countdown
+              const interval = setInterval(() => {
+                const now2 = Date.now();
+                const left = 5 - Math.floor((now2 - data.countdownStartAt) / 1000);
+                if (left > 0) {
+                  setCountdown(left);
+                } else {
+                  clearInterval(interval);
+                  router.replace(`/quiz/${currentQuizId}`);
+                }
+              }, 250);
+              return;
+            } else {
+              // Countdown is over, redirect
+              router.replace(`/quiz/${currentQuizId}`);
+              return;
+            }
+          } else {
+            // Quiz is active but not started (should not happen, fallback)
+            setStarted(false);
+            setCountdown(null);
+            setLoading(false);
+            pollTimeoutRef.current = setTimeout(pollStatus, 3000);
+            return;
+          }
         } else {
           setCountdown(null);
           setStarted(false);

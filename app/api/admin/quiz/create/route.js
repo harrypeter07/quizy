@@ -55,6 +55,7 @@ export async function POST(req) {
       questionCount,
       questions,
       active: false,
+      quizIsStarted: false,
       createdAt: new Date(),
       createdBy: 'admin'
     };

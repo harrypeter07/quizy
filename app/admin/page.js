@@ -37,6 +37,21 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchUserCount = useCallback(async () => {
+    if (!selectedQuiz) return;
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/user-count`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserCountData(data);
+      } else {
+        setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
+      }
+    } catch (error) {
+      setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
+    }
+  }, [selectedQuiz]);
+
   // Remove all round-related state
   // Remove roundStatus, roundProgress, selectedRound, autoTransitionEnabled, and any round-based state
   // Remove all round-related functions: fetchRoundStatus, fetchRoundProgress, handleAutoTransition, handleRoundAction, handleRoundEvaluation, etc.

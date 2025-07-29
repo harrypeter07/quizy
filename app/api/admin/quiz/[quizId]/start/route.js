@@ -27,13 +27,16 @@ export async function POST(req, { params }) {
     const startedAt = new Date();
     
     // Update quiz status with proper timestamp and start first round
+    const countdownStartAt = Date.now();
     const updateResult = await db.collection('quizzes').updateOne(
       { quizId },
       { 
         $set: { 
           active: true, 
           startedAt: startedAt,
-          stoppedAt: null
+          stoppedAt: null,
+          quizIsStarted: true,
+          countdownStartAt
         }
       }
     );
@@ -45,7 +48,8 @@ export async function POST(req, { params }) {
       success: true, 
       message: 'Quiz started successfully',
       quizId,
-      startedAt: startedAt.getTime()
+      startedAt: startedAt.getTime(),
+      countdownStartAt
     }), { status: 200 });
     
   } catch (error) {

@@ -11,19 +11,24 @@ export async function GET(req, { params }) {
     
     if (!quiz || !quiz.active) {
       console.log(`[start-status] Quiz not active or not found for quizId: ${quizId}`);
-      return new Response(JSON.stringify({ active: false }), { status: 200 });
+      return new Response(JSON.stringify({ active: false, quizIsStarted: false, countdownStartAt: null }), { status: 200 });
     }
     
-    // Only return quizId, name, questionCount, questions, and active
+    // Only return quizId, name, questionCount, questions, active, quizIsStarted, countdownStartAt
     return new Response(
       JSON.stringify({ 
         quizId: quiz.quizId,
         name: quiz.name,
         questionCount: quiz.questionCount,
         questions: quiz.questions,
-        active: quiz.active
+        active: quiz.active,
+        quizIsStarted: quiz.quizIsStarted || false,
+        countdownStartAt: quiz.countdownStartAt || null
       }),
       { status: 200 }
     );
   } catch (err) {
-    console.error(`
+    console.error('[start-status] Error:', err);
+    return new Response(JSON.stringify({ active: false, error: 'Internal server error' }), { status: 500 });
+  }
+}
