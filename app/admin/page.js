@@ -25,6 +25,11 @@ export default function AdminPage() {
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('default');
   const [availableQuestionSets, setAvailableQuestionSets] = useState(questionSets);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [questionResponses, setQuestionResponses] = useState(null);
+  const [responsesLoading, setResponsesLoading] = useState(false);
+
+  // Calculate isQuizActive early to avoid initialization errors
+  const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
 
   // Define all callback functions first
   const fetchDashboardData = useCallback(async (token) => {
@@ -76,13 +81,14 @@ export default function AdminPage() {
     }
   }, [fetchDashboardData]);
 
-  // Always use the most recent quiz for all controls and info
+  // Auto-select the most recent quiz only if no quiz is currently selected or if selectedQuiz is 'default'
   useEffect(() => {
-    if (dashboardData && dashboardData.quizStats && dashboardData.quizStats.length > 0) {
+    if (dashboardData && dashboardData.quizStats && dashboardData.quizStats.length > 0 && (selectedQuiz === 'default' || !selectedQuiz)) {
       const latestQuiz = dashboardData.quizStats.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+      console.log('Auto-selecting quiz:', latestQuiz.id, 'from available quizzes:', dashboardData.quizStats.map(q => q.id));
       setSelectedQuiz(latestQuiz.id);
     }
-  }, [dashboardData]);
+  }, [dashboardData, selectedQuiz]);
 
   useEffect(() => {
     if (selectedQuiz && isAuthenticated) {
@@ -150,6 +156,52 @@ export default function AdminPage() {
       loadLeaderboard();
     }
   }, [activeTab, selectedQuiz, leaderboardLimit, adminToken]);
+
+  // Auto-load question responses when tab changes
+  useEffect(() => {
+    if (activeTab === 'responses' && selectedQuiz && adminToken) {
+      const loadQuestionResponses = async () => {
+        setResponsesLoading(true);
+        try {
+          const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setQuestionResponses(data);
+          } else {
+            setQuestionResponses(null);
+          }
+        } catch (error) {
+          setQuestionResponses(null);
+        } finally {
+          setResponsesLoading(false);
+        }
+      };
+      loadQuestionResponses();
+    }
+  }, [activeTab, selectedQuiz, adminToken]);
+
+  // Auto-refresh responses every 10 seconds when on responses tab and quiz is active
+  useEffect(() => {
+    if (activeTab === 'responses' && selectedQuiz && adminToken && isQuizActive) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setQuestionResponses(data);
+          }
+        } catch (error) {
+          console.error('Error refreshing responses:', error);
+        }
+      }, 10000); // Refresh every 10 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedQuiz, adminToken, isQuizActive]);
 
   const handleLogin = async () => {
     if (!adminToken.trim()) {
@@ -230,6 +282,36 @@ export default function AdminPage() {
     }
   };
 
+  const handleEvaluate = async () => {
+    setLoading(true);
+    setStatus('Calculating results and stopping quiz...');
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/evaluate`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.quizStopped) {
+          setStatus(`✅ Results calculated successfully! Quiz automatically stopped. ${data.totalEvaluated} participants evaluated.`);
+        } else {
+          setStatus(`✅ Results calculated successfully! ${data.totalEvaluated} participants evaluated.`);
+        }
+        await fetchDashboardData(adminToken); // Refresh data
+        await fetchUserCount(); // Refresh user count
+      } else {
+        const errorData = await res.json();
+        setStatus(`Evaluation failed: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error calculating results');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Removed handleRoundAction, handleRoundEvaluation, fetchLeaderboard, exportLeaderboard
 
   const handleCreateQuiz = async () => {
@@ -296,8 +378,10 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json();
         setCurrentQuizInfo(data);
-        // Set the selected quiz to the recent quiz ID
-        setSelectedQuiz(data.quizId);
+        // Only set selected quiz if none is currently selected
+        if (!selectedQuiz || selectedQuiz === 'default') {
+          setSelectedQuiz(data.quizId);
+        }
       } else {
         console.error('Failed to fetch quiz info:', res.status);
       }
@@ -346,10 +430,10 @@ export default function AdminPage() {
         const { validationReport } = data;
         
         if (validationReport.issues.length === 0) {
-          setStatus(`✅ Scores calculated successfully! ${validationReport.participants?.totalUsers || 0} participants processed.`);
+          setStatus(`✅ Scores calculated successfully! ${validationReport.evaluation?.totalParticipants || 0} participants processed.`);
         } else {
           const issueCount = validationReport.issues.reduce((sum, issue) => sum + issue.count, 0);
-          setStatus(`✅ Scores calculated! ${validationReport.participants?.totalUsers || 0} participants processed. Found ${issueCount} data issues.`);
+          setStatus(`✅ Scores calculated! ${validationReport.evaluation?.totalParticipants || 0} participants processed. Found ${issueCount} data issues.`);
           console.log('Data validation issues:', validationReport.issues);
         }
       } else {
@@ -394,8 +478,6 @@ export default function AdminPage() {
   if (loading) {
     return <LoadingSpinner message={status} />;
   }
-
-  const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -499,18 +581,12 @@ export default function AdminPage() {
                   {!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}
                 </button>
                 <button
-                  onClick={() => handleQuizAction('evaluate')}
+                  onClick={handleEvaluate}
                   disabled={loading}
                   className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                  title="Calculate results and automatically stop the quiz"
                 >
-                  📊 Evaluate
-                </button>
-                <button
-                  onClick={handleValidateData}
-                  disabled={loading}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
-                >
-                  🔍 Validate Data
+                  🏁 Evaluate & Stop Quiz
                 </button>
               </div>
             </div>
@@ -690,7 +766,7 @@ export default function AdminPage() {
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
-              {['dashboard', 'quizzes', 'leaderboard', 'progress', 'users'].map((tab) => (
+              {['dashboard', 'quizzes', 'leaderboard', 'responses', 'progress', 'users'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -754,20 +830,33 @@ export default function AdminPage() {
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
                 {dashboardData?.quizStats && dashboardData.quizStats.length > 0 && (
-                  <div className="mb-4">
-                    <label htmlFor="quiz-select" className="mr-2 font-semibold">Select Quiz:</label>
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <label htmlFor="quiz-select" className="text-lg font-semibold text-blue-900">🎯 Select Quiz to Control:</label>
+                      <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                        {dashboardData.quizStats.length} quizzes available
+                      </span>
+                    </div>
                     <select
                       id="quiz-select"
                       value={selectedQuiz}
-                      onChange={e => setSelectedQuiz(e.target.value)}
-                      className="px-3 py-2 rounded border"
+                      onChange={e => {
+                        console.log('Manual quiz selection:', e.target.value);
+                        setSelectedQuiz(e.target.value);
+                      }}
+                      className="w-full px-4 py-3 rounded-lg border-2 border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-lg font-medium"
                     >
                       {dashboardData.quizStats.map(quiz => (
                         <option key={quiz.id} value={quiz.id}>
-                          {quiz.name} ({quiz.id})
+                          📝 {quiz.name} ({quiz.id}) - {quiz.active ? '🟢 Active' : '🔴 Inactive'}
                         </option>
                       ))}
                     </select>
+                    {selectedQuiz && (
+                      <div className="mt-2 text-sm text-blue-700">
+                        ✅ Currently controlling: <span className="font-semibold">{dashboardData.quizStats.find(q => q.id === selectedQuiz)?.name || selectedQuiz}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -796,7 +885,7 @@ export default function AdminPage() {
                     <button onClick={() => handleQuizAction('restart')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-purple-500 hover:bg-purple-600 text-white disabled:bg-gray-400 disabled:text-gray-600">🔄 Restart Quiz</button>
                     <button onClick={() => handleQuizAction('stop')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-red-500 hover:bg-red-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}</button>
 
-                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Calculate Scores</button>
+                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold" title="Calculate scores without stopping the quiz">📊 Calculate Scores Only</button>
                     <button onClick={() => setShowCreateQuiz(!showCreateQuiz)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold">➕ Create New Quiz</button>
                   </div>
                 )}
@@ -863,7 +952,10 @@ export default function AdminPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quiz</label>
                       <select
                         value={selectedQuiz}
-                        onChange={(e) => setSelectedQuiz(e.target.value)}
+                        onChange={(e) => {
+                          console.log('Leaderboard quiz selection:', e.target.value);
+                          setSelectedQuiz(e.target.value);
+                        }}
                         className="w-full border rounded px-3 py-2"
                       >
                         {dashboardData?.quizStats.map((quiz) => (
@@ -1012,6 +1104,126 @@ export default function AdminPage() {
                 </div>
 
                 {/* Removed roundProgress and round-related UI */}
+              </div>
+            )}
+
+            {activeTab === 'responses' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Question Response Analysis</h2>
+                  <button
+                    onClick={async () => {
+                      setResponsesLoading(true);
+                      try {
+                        const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+                          headers: { 'Authorization': `Bearer ${adminToken}` }
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setQuestionResponses(data);
+                        }
+                      } catch (error) {
+                        console.error('Error loading responses:', error);
+                      } finally {
+                        setResponsesLoading(false);
+                      }
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    disabled={responsesLoading}
+                  >
+                    {responsesLoading ? 'Loading...' : 'Refresh Responses'}
+                  </button>
+                </div>
+
+                {questionResponses ? (
+                  <div className="space-y-6">
+                    {/* Overall Statistics */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-3">Overall Statistics</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">{questionResponses.overallStats.totalAnswers}</div>
+                          <div className="text-sm text-blue-700">Total Answers</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600">{questionResponses.overallStats.activeUsers}</div>
+                          <div className="text-sm text-green-700">Active Users</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-purple-600">{questionResponses.overallStats.averageResponsesPerQuestion}</div>
+                          <div className="text-sm text-purple-700">Avg Responses/Q</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-orange-600">{questionResponses.overallStats.completionRate}%</div>
+                          <div className="text-sm text-orange-700">Completion Rate</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question-by-Question Analysis */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Question Response Details</h3>
+                      {questionResponses.questionResponses.map((question, index) => (
+                        <div key={question.questionId} className="bg-white border rounded-lg p-4 shadow-sm">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-semibold text-gray-900">Question {question.questionNumber}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{question.questionText}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-blue-600">{question.totalResponses}</div>
+                              <div className="text-xs text-gray-500">responses</div>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Option Distribution</h5>
+                              <div className="space-y-2">
+                                {Object.entries(question.optionCounts).map(([optionIndex, count]) => (
+                                  <div key={optionIndex} className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Option {parseInt(optionIndex) + 1}:</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-20 bg-gray-200 rounded-full h-2">
+                                        <div 
+                                          className="bg-blue-500 h-2 rounded-full" 
+                                          style={{ width: `${question.totalResponses > 0 ? (count / question.totalResponses * 100) : 0}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-900">{count}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Performance Metrics</h5>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Response Rate:</span>
+                                  <span className="font-medium">{question.responseRate}%</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Avg Response Time:</span>
+                                  <span className="font-medium">{question.averageResponseTime}s</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">📊</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Response Data</h3>
+                    <p className="text-gray-600">
+                      No response data available. Make sure the quiz is active and users are answering questions.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

@@ -142,11 +142,27 @@ export async function POST(req, { params }) {
       }
     });
     
+    // Automatically stop the quiz after evaluation
+    await db.collection('quizzes').updateOne(
+      { quizId },
+      { 
+        $set: { 
+          active: false, 
+          stoppedAt: Date.now(),
+          evaluatedAt: Date.now(),
+          evaluationCompleted: true
+        }
+      }
+    );
+    
+    console.log(`[evaluate] Quiz ${quizId} automatically stopped after evaluation`);
+    
     return new Response(JSON.stringify({ 
       status: 'ok', 
       leaderboard: leaderboardEntries,
       stats,
-      totalEvaluated: evaluationResults.length
+      totalEvaluated: evaluationResults.length,
+      quizStopped: true
     }), { status: 200 });
     
   } catch (err) {
