@@ -51,7 +51,7 @@ export default function QuizPage() {
     checkRoundStatus();
   }, [quizId, checkRoundStatus]);
 
-  const checkRoundStatus = async () => {
+  const checkRoundStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/quiz/${quizId}/round-status`);
       if (res.ok) {
@@ -68,12 +68,12 @@ export default function QuizPage() {
     } catch (error) {
       console.error('Error checking round status:', error);
     }
-  };
+  }, [quizId]);
 
   // Calculate current round based on question number
-  const getCurrentRoundLocal = (questionIndex) => {
+  const getCurrentRoundLocal = useCallback((questionIndex) => {
     return getCurrentRound(questionIndex, quizInfo?.questionsPerRound || 5);
-  };
+  }, [quizInfo?.questionsPerRound]);
 
   // Check if we should pause after this question
   const shouldPauseAfterQuestionLocal = (questionIndex) => {
