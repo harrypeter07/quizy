@@ -26,14 +26,30 @@ export default function QuizPage() {
 
   // Load questions
   useEffect(() => {
-    fetch(`/api/quiz/${quizId}/questions`)
-      .then(res => res.json())
-      .then(data => {
-        setQuestions(data.questions || []);
-        setQuizInfo({
-          totalQuestions: data.questions?.length || 0
-        });
+    const storedQuiz = localStorage.getItem(`quiz_${quizId}`);
+    if (storedQuiz) {
+      const data = JSON.parse(storedQuiz);
+      setQuestions(data.questions || []);
+      setQuizInfo({
+        totalQuestions: data.questions?.length || 0
       });
+    } else {
+      // Fallback to API if not in localStorage (e.g., for new quizzes)
+      fetch(`/api/quiz/${quizId}/questions`)
+        .then(res => res.json())
+        .then(data => {
+          setQuestions(data.questions || []);
+          setQuizInfo({
+            totalQuestions: data.questions?.length || 0
+          });
+          localStorage.setItem(`quiz_${quizId}`, JSON.stringify(data));
+        })
+        .catch(error => {
+          console.error('Error fetching questions from API:', error);
+          setQuestions([]); // Clear questions on error
+          setQuizInfo(null);
+        });
+    }
   }, [quizId]);
 
   // Submit answer to backend

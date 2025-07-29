@@ -30,7 +30,7 @@ export default function Onboarding() {
           const qRes = await fetch(`/api/quiz/${data.quizId}/questions`);
           if (qRes.ok) {
             const qData = await qRes.json();
-            localStorage.setItem('quizQuestions', JSON.stringify(qData.questions));
+            localStorage.setItem(`quiz_${data.quizId}`, JSON.stringify({ questions: qData.questions }));
           }
         }
       } catch (error) {
