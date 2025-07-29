@@ -27,6 +27,101 @@ export default function AdminPage() {
   const [currentQuizInfo, setCurrentQuizInfo] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Define all callback functions first
+  const fetchDashboardData = useCallback(async (token) => {
+    try {
+      const res = await fetch('/api/admin/dashboard', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  }, []);
+
+  const fetchRoundStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setRoundStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching round status:', error);
+    }
+  }, [selectedQuiz]);
+
+  const fetchRoundProgress = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRoundProgress(data);
+      }
+    } catch (error) {
+      console.error('Error fetching round progress:', error);
+    }
+  }, [selectedQuiz, adminToken]);
+
+  const fetchUserCount = useCallback(async () => {
+    try {
+      if (selectedQuiz) {
+        console.log('Fetching user count for quiz:', selectedQuiz);
+        const res = await fetch(`/api/admin/quiz/${selectedQuiz}/user-count`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUserCountData(data);
+          console.log('User count updated successfully');
+        } else {
+          console.error('User count fetch failed:', res.status, res.statusText);
+          const errorData = await res.json().catch(() => ({}));
+          console.error('Error details:', errorData);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user count:', error);
+      // Don't show error to user for background polling
+    }
+  }, [selectedQuiz, adminToken]);
+
+  const handleAutoTransition = useCallback(async () => {
+    setLoading(true);
+    setStatus('Checking auto transition...');
+    
+    try {
+      const res = await fetch(`/api/quiz/${selectedQuiz}/auto-transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.action) {
+          setStatus(`Auto transition: ${data.action}. ${data.nextRound ? `Advanced to round ${data.nextRound}` : 'Round paused'}`);
+          await fetchRoundStatus(); // Refresh round status
+          await fetchDashboardData(adminToken); // Refresh dashboard
+        } else {
+          setStatus('No auto transition needed');
+        }
+      } else {
+        const errorData = await res.json();
+        setStatus(`Auto transition failed: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error during auto transition');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedQuiz, fetchRoundStatus, fetchDashboardData, adminToken]);
+
+  // Now define useEffect hooks after the functions
   useEffect(() => {
     // Check if token is stored in localStorage
     const storedToken = localStorage.getItem('adminToken');
@@ -35,7 +130,7 @@ export default function AdminPage() {
       setIsAuthenticated(true);
       fetchDashboardData(storedToken);
     }
-  }, []);
+  }, [fetchDashboardData]);
 
   useEffect(() => {
     if (selectedQuiz && isAuthenticated) {
@@ -105,46 +200,6 @@ export default function AdminPage() {
       setLoading(false);
     }
   };
-
-  const fetchDashboardData = useCallback(async (token) => {
-    try {
-      const res = await fetch('/api/admin/dashboard', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDashboardData(data);
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    }
-  }, []);
-
-  const fetchRoundStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/quiz/${selectedQuiz}/round-status`);
-      if (res.ok) {
-        const data = await res.json();
-        setRoundStatus(data);
-      }
-    } catch (error) {
-      console.error('Error fetching round status:', error);
-    }
-  }, [selectedQuiz]);
-
-  const fetchRoundProgress = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/round-progress`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRoundProgress(data);
-      }
-    } catch (error) {
-      console.error('Error fetching round progress:', error);
-    }
-  }, [selectedQuiz, adminToken]);
 
   const handleQuizAction = async (action, quizId = selectedQuiz) => {
     setLoading(true);
@@ -295,36 +350,6 @@ export default function AdminPage() {
     setStatus('Leaderboard exported successfully!');
   };
 
-  const handleAutoTransition = useCallback(async () => {
-    setLoading(true);
-    setStatus('Checking auto transition...');
-    
-    try {
-      const res = await fetch(`/api/quiz/${selectedQuiz}/auto-transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        if (data.action) {
-          setStatus(`Auto transition: ${data.action}. ${data.nextRound ? `Advanced to round ${data.nextRound}` : 'Round paused'}`);
-          await fetchRoundStatus(); // Refresh round status
-          await fetchDashboardData(adminToken); // Refresh dashboard
-        } else {
-          setStatus('No auto transition needed');
-        }
-      } else {
-        const errorData = await res.json();
-        setStatus(`Auto transition failed: ${errorData.error}`);
-      }
-    } catch (error) {
-      setStatus('Error during auto transition');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedQuiz, fetchRoundStatus, fetchDashboardData, adminToken]);
-
   const handleCreateQuiz = async () => {
     if (!newQuizData.name.trim()) {
       setStatus('Please enter a quiz name');
@@ -381,29 +406,6 @@ export default function AdminPage() {
     localStorage.removeItem('adminToken');
     setStatus('Logged out');
   };
-
-  const fetchUserCount = useCallback(async () => {
-    try {
-      if (selectedQuiz) {
-        console.log('Fetching user count for quiz:', selectedQuiz);
-        const res = await fetch(`/api/admin/quiz/${selectedQuiz}/user-count`, {
-          headers: { 'Authorization': `Bearer ${adminToken}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUserCountData(data);
-          console.log('User count updated successfully');
-        } else {
-          console.error('User count fetch failed:', res.status, res.statusText);
-          const errorData = await res.json().catch(() => ({}));
-          console.error('Error details:', errorData);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching user count:', error);
-      // Don't show error to user for background polling
-    }
-  }, [selectedQuiz, adminToken]);
 
   const fetchCurrentQuizInfo = async () => {
     try {
