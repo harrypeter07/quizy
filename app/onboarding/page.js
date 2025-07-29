@@ -23,15 +23,21 @@ export default function Onboarding() {
         if (res.ok) {
           const data = await res.json();
           setQuizInfo(data);
-          
           // Set the quizId cookie to the recent quiz ID
           Cookies.set('quizId', data.quizId, { expires: 30 });
+
+          // Fetch questions for this quiz and store in localStorage
+          const qRes = await fetch(`/api/quiz/${data.quizId}/questions`);
+          if (qRes.ok) {
+            const qData = await qRes.json();
+            localStorage.setItem('quizQuestions', JSON.stringify(qData.questions));
+          }
         }
       } catch (error) {
         console.error('Error fetching recent quiz:', error);
       }
     };
-    
+
     fetchRecentQuiz();
   }, []);
 
