@@ -47,16 +47,8 @@ export default function QuizPage() {
         });
       });
     
+    // Initial round status check
     checkRoundStatus();
-    
-    // Check round status more frequently (every 1 second) to stay in sync
-    roundStatusInterval.current = setInterval(checkRoundStatus, 1000);
-    
-    return () => {
-      if (roundStatusInterval.current) {
-        clearInterval(roundStatusInterval.current);
-      }
-    };
   }, [quizId]);
 
   const checkRoundStatus = async () => {
@@ -123,6 +115,35 @@ export default function QuizPage() {
     return () => clearInterval(timerRef.current);
   }, [current, questions.length, isRoundPaused, currentRound]);
 
+  // Separate effect for round status checking (less frequent)
+  useEffect(() => {
+    if (isRoundPaused) return; // Don't check if already paused
+    
+    const checkStatusInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/quiz/${quizId}/round-status`);
+        if (res.ok) {
+          const status = await res.json();
+          if (status.isPaused && !isRoundPaused) {
+            setRoundStatus(status);
+            setIsRoundPaused(true);
+            setCurrentRound(status.currentRound);
+            setFeedback('Round completed! Waiting for admin to resume...');
+          } else if (!status.isPaused && isRoundPaused) {
+            setRoundStatus(status);
+            setIsRoundPaused(false);
+            setCurrentRound(status.currentRound);
+            setFeedback('');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking round status:', error);
+      }
+    }, 3000); // Check every 3 seconds instead of every second
+    
+    return () => clearInterval(checkStatusInterval);
+  }, [quizId, isRoundPaused]);
+
   const handleSelect = idx => {
     // Prevent multiple clicks on the same option
     if (clickedOptions.has(idx) || selected !== null || submitting || isRoundPaused) {
@@ -188,7 +209,27 @@ export default function QuizPage() {
     // Submit answer immediately
     await submitAnswer(answerData);
     
-    // Trigger auto transition check after answer submission
+    // Check if this is the last question of the current round
+    const isLastQuestionOfRound = shouldPauseAfterQuestionLocal(current);
+    
+    if (isLastQuestionOfRound) {
+      // Immediately set round as paused and show waiting message
+      setFeedback('Round completed! Waiting for admin to resume...');
+      setIsRoundPaused(true);
+      setSubmitting(false);
+      
+      // Trigger auto transition check in background (don't wait for response)
+      fetch(`/api/quiz/${quizId}/auto-transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }).catch(error => {
+        console.error('Auto transition check failed:', error);
+      });
+      
+      return;
+    }
+    
+    // For non-round-ending questions, trigger auto transition check
     try {
       await fetch(`/api/quiz/${quizId}/auto-transition`, {
         method: 'POST',
@@ -200,13 +241,6 @@ export default function QuizPage() {
     
     setTimeout(() => {
       setSubmitting(false);
-      
-      // Check if we should pause after this question
-      if (shouldPauseAfterQuestionLocal(current)) {
-        setFeedback('Round completed! Waiting for admin to resume...');
-        setIsRoundPaused(true);
-        return;
-      }
       
       // Move to next question if not at the end
       if (current < questions.length - 1) {
