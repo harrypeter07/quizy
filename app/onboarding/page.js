@@ -92,6 +92,7 @@ export default function Onboarding() {
         userId,
         displayName: formData.displayName.trim(),
         uniqueId: idData.uniqueId,
+        quizId: quizInfo?.quizId,
         createdAt: new Date().toISOString()
       };
       

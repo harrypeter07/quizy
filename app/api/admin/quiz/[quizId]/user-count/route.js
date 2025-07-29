@@ -24,34 +24,31 @@ export async function GET(req, { params }) {
     // Get quiz info to check if it's active and get creation time
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
     if (!quizDoc) {
-      return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
+      // Return zero counts if quiz not found
+      return new Response(JSON.stringify({
+        quizId,
+        quizName: null,
+        quizCreatedAt: null,
+        isQuizActive: false,
+        totalUsers: 0,
+        activeUsers: 0,
+        waitingUsers: 0,
+        recentUsers: 0,
+        userList: [],
+        lastUpdated: Date.now()
+      }), { status: 200 });
     }
     
     const isQuizActive = quizDoc.active || false;
     const quizCreatedAt = new Date(quizDoc.createdAt).getTime();
     
-    // Use more efficient queries with aggregation pipeline
-    // Get users who joined AFTER this quiz was created using aggregation
-    const usersForThisQuiz = await db.collection('users').aggregate([
-      {
-        $match: {
-          createdAt: { $gte: new Date(quizCreatedAt) }
-        }
-      },
-      {
-        $project: {
-          userId: 1,
-          displayName: 1,
-          uniqueId: 1,
-          createdAt: 1
-        }
-      }
-    ]).toArray();
+    // Get users for this quiz by quizId
+    const usersForThisQuiz = await db.collection('users').find({ quizId }).toArray();
     
     // Get users who have answered questions in this quiz (active participants)
     const activeUsers = await db.collection('answers').distinct('userId', { quizId });
     
-    // Get users who are in waiting room (joined after quiz creation but haven't answered yet)
+    // Get users who are in waiting room (joined for this quiz but haven't answered yet)
     const waitingUsers = usersForThisQuiz.filter(user => !activeUsers.includes(user.userId));
     
     // Get recent activity (users who joined in last 5 minutes)

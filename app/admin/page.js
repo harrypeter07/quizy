@@ -121,6 +121,31 @@ export default function AdminPage() {
     }
   }, [selectedQuiz, fetchRoundStatus, fetchDashboardData, adminToken]);
 
+  // Add a new function to start quiz and round 1
+  const handleStartQuizAndRound1 = async () => {
+    if (!selectedQuiz) return;
+    setLoading(true);
+    setStatus('Starting quiz and round 1...');
+    try {
+      // Start the quiz
+      await handleQuizAction('start', selectedQuiz);
+      // Start round 1
+      await fetch(`/api/quiz/${selectedQuiz}/round-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start-round', round: 1 })
+      });
+      setStatus('Quiz and Round 1 started!');
+      await fetchDashboardData(adminToken);
+      await fetchRoundStatus();
+      await fetchRoundProgress();
+    } catch (error) {
+      setStatus('Error starting quiz and round 1');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Now define useEffect hooks after the functions
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -131,6 +156,14 @@ export default function AdminPage() {
       fetchDashboardData(storedToken);
     }
   }, [fetchDashboardData]);
+
+  // Always use the most recent quiz for all controls and info
+  useEffect(() => {
+    if (dashboardData && dashboardData.quizStats && dashboardData.quizStats.length > 0) {
+      const latestQuiz = dashboardData.quizStats.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+      setSelectedQuiz(latestQuiz.id);
+    }
+  }, [dashboardData]);
 
   useEffect(() => {
     if (selectedQuiz && isAuthenticated) {
@@ -513,6 +546,8 @@ export default function AdminPage() {
     return <LoadingSpinner message={status} />;
   }
 
+  const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -571,7 +606,7 @@ export default function AdminPage() {
                 </div>
                 {/* Quiz Status Display */}
                 <div className="mt-3">
-                  {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? (
+                  {isQuizActive ? (
                     <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
                       🟢 Quiz Started
                     </span>
@@ -598,26 +633,33 @@ export default function AdminPage() {
                   ➕ Create New Quiz
                 </button>
                 <button
+                  onClick={handleStartQuizAndRound1}
+                  disabled={isQuizActive || loading}
+                  className="px-6 py-3 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:text-gray-600"
+                >
+                  🚀 Start Quiz & Round 1
+                </button>
+                <button
                   onClick={() => handleQuizAction('start')}
-                  disabled={dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active || loading}
+                  disabled={!isQuizActive || loading}
                   className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-                    dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active
+                    isQuizActive
                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                       : 'bg-green-500 hover:bg-green-600 text-white'
                   }`}
                 >
-                  {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '✅ Quiz Started' : '🚀 Start Quiz'}
+                  {isQuizActive ? '✅ Quiz Started' : '🚀 Start Quiz'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('stop')}
-                  disabled={!dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active || loading}
+                  disabled={!isQuizActive || loading}
                   className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-                    !dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active
+                    !isQuizActive
                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                       : 'bg-red-500 hover:bg-red-600 text-white'
                   }`}
                 >
-                  {!dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}
+                  {!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('evaluate')}
@@ -873,6 +915,16 @@ export default function AdminPage() {
 
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
+                {dashboardData && selectedQuiz && (
+                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                    <button onClick={() => handleQuizAction('start')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{isQuizActive ? '✅ Quiz Started' : '🚀 Start Quiz'}</button>
+                    <button onClick={() => handleQuizAction('stop')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-red-500 hover:bg-red-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}</button>
+                    <button onClick={() => handleQuizAction('evaluate')} disabled={loading} className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Evaluate</button>
+                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">🔍 Validate Data</button>
+                    <button onClick={() => setShowCreateQuiz(!showCreateQuiz)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold">➕ Create New Quiz</button>
+                  </div>
+                )}
+
                 {/* Current Round Information */}
                 {roundProgress && (
                   <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
@@ -983,74 +1035,47 @@ export default function AdminPage() {
                     </div>
 
                     {/* Action Buttons */}
-                    {roundProgress.roundStatus === 'active' && (
-                      <div className="mt-6 pt-4 border-t border-blue-200">
-                        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <p className="text-green-800 font-medium">
-                            🟢 Round {roundProgress.currentRound} is currently ACTIVE - Users can submit answers
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            onClick={() => handleRoundAction('pause-round')}
-                            className="bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
-                          >
-                            ⏸️ Pause Round
-                          </button>
-                          {roundProgress.canEvaluate && (
-                            <button
-                              onClick={() => handleRoundEvaluation(roundProgress.currentRound)}
-                              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
-                            >
-                              📊 Evaluate Round {roundProgress.currentRound}
-                            </button>
-                          )}
-                          {roundProgress.evaluationReady && (
-                            <div className="bg-green-100 border border-green-300 rounded-lg px-4 py-2">
-                              <p className="text-green-800 font-medium">
-                                🎉 Round {roundProgress.currentRound} is ready for evaluation! 
-                                All users have completed their answers.
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                    <div className="mt-6 pt-4 border-t border-blue-200">
+                      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-green-800 font-medium">
+                          {roundProgress.roundStatus === 'active' && `🟢 Round ${roundProgress.currentRound} is currently ACTIVE - Users can submit answers`}
+                          {roundProgress.roundStatus === 'paused' && `🟡 Round ${roundProgress.currentRound} is currently PAUSED - Users cannot submit answers`}
+                          {roundProgress.roundStatus !== 'active' && roundProgress.roundStatus !== 'paused' && `Round ${roundProgress.currentRound} is ${roundProgress.roundStatus}`}
+                        </p>
                       </div>
-                    )}
-
-                    {roundProgress.roundStatus === 'paused' && (
-                      <div className="mt-6 pt-4 border-t border-blue-200">
-                        <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                          <p className="text-orange-800 font-medium">
-                            🟡 Round {roundProgress.currentRound} is currently PAUSED - Users cannot submit answers
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            onClick={() => handleRoundAction('resume-round')}
-                            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
-                          >
-                            ▶️ Resume Round
-                          </button>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={() => handleRoundAction('pause-round')}
+                          disabled={roundProgress.roundStatus !== 'active'}
+                          className={`bg-orange-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 ${roundProgress.roundStatus !== 'active' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-700'}`}
+                        >
+                          ⏸️ Pause Round
+                        </button>
+                        <button
+                          onClick={() => handleRoundAction('resume-round')}
+                          disabled={roundProgress.roundStatus !== 'paused'}
+                          className={`bg-green-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 ${roundProgress.roundStatus !== 'paused' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-700'}`}
+                        >
+                          ▶️ Resume Round
+                        </button>
+                        {roundProgress.canEvaluate && (
                           <button
                             onClick={() => handleRoundEvaluation(roundProgress.currentRound)}
                             className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
                           >
                             📊 Evaluate Round {roundProgress.currentRound}
                           </button>
-                        </div>
+                        )}
+                        {roundProgress.evaluationReady && (
+                          <div className="bg-green-100 border border-green-300 rounded-lg px-4 py-2">
+                            <p className="text-green-800 font-medium">
+                              🎉 Round {roundProgress.currentRound} is ready for evaluation! 
+                              All users have completed their answers.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
-
-                    {roundProgress.roundStatus === 'completed' && (
-                      <div className="mt-6 pt-4 border-t border-blue-200">
-                        <div className="bg-blue-100 border border-blue-300 rounded-lg px-4 py-3">
-                          <p className="text-blue-800 font-medium">
-                            ✅ Round {roundProgress.currentRound} completed successfully! 
-                            You can now evaluate the results or start the next round.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -1061,7 +1086,7 @@ export default function AdminPage() {
                     Use the Start/Stop buttons in the main header above to control the quiz.
                   </p>
                   <div className="text-sm text-blue-600">
-                    <p>• Quiz Status: {dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active ? '🟢 Active' : '🔴 Inactive'}</p>
+                    <p>• Quiz Status: {isQuizActive ? '🟢 Active' : '🔴 Inactive'}</p>
                     <p>• Current Round: {roundStatus?.currentRound || 1}</p>
                     <p>• Total Rounds: {roundStatus?.totalRounds || 1}</p>
                   </div>

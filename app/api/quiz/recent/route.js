@@ -5,23 +5,29 @@ export async function GET() {
     const client = await clientPromise;
     const db = client.db();
 
-    // Find the most recently created quiz
-    const recentQuiz = await db.collection('quizzes')
-      .find({})
-      .sort({ createdAt: -1 })
+    // Find the most recently started (active) quiz first
+    let quiz = await db.collection('quizzes')
+      .find({ active: true })
+      .sort({ startedAt: -1 })
       .limit(1)
       .toArray();
-
-    if (recentQuiz.length === 0) {
+    if (quiz.length === 0) {
+      // If no active quiz, fall back to most recently created
+      quiz = await db.collection('quizzes')
+        .find({})
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .toArray();
+    }
+    if (quiz.length === 0) {
       return new Response(JSON.stringify({ 
         error: 'No quizzes found' 
       }), { status: 404 });
     }
-
-    const quiz = recentQuiz[0];
+    const recentQuiz = quiz[0];
     
     // Format the creation time
-    const createdAt = new Date(quiz.createdAt);
+    const createdAt = new Date(recentQuiz.createdAt);
     const formattedTime = createdAt.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -32,17 +38,17 @@ export async function GET() {
     });
 
     const responseData = {
-      quizId: quiz.quizId,
-      name: quiz.name,
-      questionCount: quiz.questionCount,
-      totalRounds: quiz.totalRounds,
-      questionsPerRound: quiz.questionsPerRound,
-      active: quiz.active,
-      currentRound: quiz.currentRound,
-      paused: quiz.paused,
-      createdAt: quiz.createdAt,
+      quizId: recentQuiz.quizId,
+      name: recentQuiz.name,
+      questionCount: recentQuiz.questionCount,
+      totalRounds: recentQuiz.totalRounds,
+      questionsPerRound: recentQuiz.questionsPerRound,
+      active: recentQuiz.active,
+      currentRound: recentQuiz.currentRound,
+      paused: recentQuiz.paused,
+      createdAt: recentQuiz.createdAt,
       formattedCreatedAt: formattedTime,
-      createdBy: quiz.createdBy
+      createdBy: recentQuiz.createdBy
     };
 
     return new Response(JSON.stringify(responseData), { status: 200 });

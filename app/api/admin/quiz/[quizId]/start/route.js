@@ -18,27 +18,36 @@ export async function POST(req, { params }) {
   const { quizId } = awaitedParams;
   
   try {
+    console.log(`[admin-start] Attempting to start quiz: ${quizId}`);
     const client = await clientPromise;
     const db = client.db();
+    // This updates the quizzes collection
     
     // Get current timestamp for startedAt
     const startedAt = new Date();
     const roundStartTime = Date.now();
     
+    // Ensure only one quiz is active at a time (optional, uncomment if needed)
+    // await db.collection('quizzes').updateMany({}, { $set: { active: false } });
+
     // Update quiz status with proper timestamp and start first round
-    await db.collection('quizzes').updateOne(
+    const updateResult = await db.collection('quizzes').updateOne(
       { quizId },
       { 
         $set: { 
           active: true, 
-          currentRound: 1,
           paused: false,
+          currentRound: 1,
           startedAt: startedAt,
           roundStartTime: roundStartTime,
-          countdown: 5 // 5 second countdown before quiz starts
-        } 
+          countdown: 5, // 5 second countdown before quiz starts
+          stoppedAt: null // clear stoppedAt if present
+        }
       }
     );
+    const updatedQuiz = await db.collection('quizzes').findOne({ quizId });
+    console.log('[admin-start] Updated quiz document:', updatedQuiz);
+    console.log(`[admin-start] Quiz ${quizId} started successfully.`);
 
     return new Response(JSON.stringify({ 
       success: true, 
@@ -51,7 +60,7 @@ export async function POST(req, { params }) {
     }), { status: 200 });
     
   } catch (error) {
-    console.error('Start quiz error:', error);
+    console.error(`[admin-start] Start quiz error for quizId ${quizId}:`, error);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
   }
 } 

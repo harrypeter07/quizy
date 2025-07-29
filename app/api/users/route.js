@@ -5,6 +5,7 @@ const userSchema = z.object({
   userId: z.string().min(1),
   displayName: z.string().min(2).max(20),
   uniqueId: z.string().length(4),
+  quizId: z.string().min(1),
   createdAt: z.string().optional()
 });
 
@@ -31,6 +32,7 @@ export async function POST(req) {
     const userToStore = {
       ...userData,
       displayName: userData.displayName.trim(),
+      quizId: userData.quizId,
       createdAt: userData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

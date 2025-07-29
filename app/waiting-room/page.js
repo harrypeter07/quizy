@@ -14,9 +14,43 @@ export default function WaitingRoom() {
   const [error, setError] = useState(null);
   const [quizInfo, setQuizInfo] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
-  const quizId = Cookies.get('quizId') || 'default';
+  const [currentQuizId, setCurrentQuizId] = useState(Cookies.get('quizId') || 'default');
   const pollTimeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+  const [timeoutError, setTimeoutError] = useState(false);
+
+  useEffect(() => {
+    // Timeout to prevent indefinite loading
+    const timeout = setTimeout(() => {
+      if (loading) {
+        setTimeoutError(true);
+        setLoading(false);
+      }
+    }, 10000); // 10 seconds
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
+  // Periodically refresh the most recent quizId
+  useEffect(() => {
+    let lastQuizId = currentQuizId;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/quiz/recent');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.quizId && data.quizId !== lastQuizId) {
+            setCurrentQuizId(data.quizId);
+            setQuizInfo(data);
+            Cookies.set('quizId', data.quizId, { expires: 30 });
+            lastQuizId = data.quizId;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }, 5000); // every 5 seconds
+    return () => clearInterval(interval);
+  }, [currentQuizId]);
 
   useEffect(() => {
     // Fetch quiz and user info
@@ -26,11 +60,9 @@ export default function WaitingRoom() {
         if (res.ok) {
           const data = await res.json();
           setQuizInfo(data);
-          
-          // Set the quizId cookie to the recent quiz ID
+          setCurrentQuizId(data.quizId);
           Cookies.set('quizId', data.quizId, { expires: 30 });
         }
-        
         // Get user info from cookies
         const displayName = Cookies.get('displayName');
         const uniqueId = Cookies.get('uniqueId');
@@ -39,50 +71,34 @@ export default function WaitingRoom() {
         }
       } catch (error) {
         console.error('Error fetching quiz info:', error);
+        setError('Failed to load quiz info. Please check your connection or try again later.');
+      } finally {
+        setLoading(false);
       }
     };
-    
     fetchInfo();
-  }, [quizId]);
+  }, []); // only on mount
 
   useEffect(() => {
-    let interval;
     let isMounted = true;
-    
+
     async function pollStatus() {
       if (polling || !isMounted) return; // Prevent multiple simultaneous requests
-      
+
       setPolling(true);
       try {
-        const res = await fetch(`/api/quiz/${quizId}/start-status`);
-        
+        const res = await fetch(`/api/quiz/${currentQuizId}/start-status`);
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
-        
         const data = await res.json();
-        
-        if (!isMounted) return; // Check if component is still mounted
-        
+        if (!isMounted) return;
         if (data.active) {
           setStarted(true);
           setLoading(false);
-          
-          // Ensure we have valid timestamps for countdown calculation
-          const startedAt = data.startedAt || Date.now();
-          const countdown = data.countdown || 5;
-          const countdownTime = Math.max(0, Math.floor((startedAt + countdown * 1000 - Date.now()) / 1000));
-          setCountdown(countdownTime);
-          
-          interval = setInterval(() => {
-            if (!isMounted) return;
-            const timeLeft = Math.max(0, Math.floor((startedAt + countdown * 1000 - Date.now()) / 1000));
-            setCountdown(timeLeft);
-            if (timeLeft <= 0) {
-              clearInterval(interval);
-              router.replace(`/quiz/${quizId}`);
-            }
-          }, 1000);
+          // Immediately redirect to quiz page
+          router.replace(`/quiz/${currentQuizId}`);
+          return;
         } else {
           setCountdown(null);
           setStarted(false);
@@ -95,11 +111,9 @@ export default function WaitingRoom() {
       } catch (error) {
         console.error('Error polling quiz status:', error);
         retryCountRef.current += 1;
-        
         if (isMounted) {
           setLoading(false);
           setError(`Connection error (attempt ${retryCountRef.current})`);
-          
           // Stop retrying after 5 attempts
           if (retryCountRef.current < 5) {
             pollTimeoutRef.current = setTimeout(pollStatus, 5000);
@@ -113,18 +127,29 @@ export default function WaitingRoom() {
         }
       }
     }
-    
+
     pollStatus();
-    
+
     return () => {
       isMounted = false;
-      if (interval) clearInterval(interval);
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
-  }, [quizId, router, polling]); // Added 'polling' back to dependencies
+  }, [currentQuizId, router, polling]);
 
   if (loading) {
-    return <LoadingSpinner message="Loading waiting room..." />;
+    // Only show a generic loading message until quizInfo is available
+    return <LoadingSpinner message={"Loading waiting room..."} />;
+  }
+  if (timeoutError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <h2 className="text-2xl font-bold mb-4">Unable to load waiting room</h2>
+          <p className="mb-4">The request timed out. Please check your internet connection or try refreshing the page.</p>
+          <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Refresh</button>
+        </div>
+      </div>
+    );
   }
 
     return (
@@ -222,7 +247,7 @@ export default function WaitingRoom() {
             {!started && !error && (
               <div className="space-y-4">
                 <div className="bg-gradient-to-r from-[#f8e0a0]/20 to-[#14134c]/10 border border-[#14134c]/20 rounded-xl p-4">
-                  <p className="text-[#14134c] font-medium">Waiting for the Feud to start...</p>
+                  <p className="text-[#14134c] font-medium">Waiting for the Feud to start for quiz: <span className="font-bold">{quizInfo?.name || currentQuizId}</span>...</p>
                   {polling && (
                     <div className="mt-3">
                       <LoadingSpinner message="Checking status..." size="small" inline={true} />

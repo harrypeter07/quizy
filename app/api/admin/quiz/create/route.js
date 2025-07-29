@@ -70,6 +70,9 @@ export async function POST(req) {
     // Insert quiz into database
     const result = await db.collection('quizzes').insertOne(quizDoc);
 
+    // After creating the new quiz, disable all previous quizzes
+    await db.collection('quizzes').updateMany({ quizId: { $ne: quizId } }, { $set: { active: false } });
+
     return new Response(JSON.stringify({
       success: true,
       quizId,

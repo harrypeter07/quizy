@@ -30,6 +30,25 @@ export default function QuizPage() {
   const questionStart = useRef(Date.now());
   const roundStatusInterval = useRef();
 
+  // Move checkRoundStatus definition above its first use
+  const checkRoundStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/quiz/${quizId}/round-status`);
+      if (res.ok) {
+        const status = await res.json();
+        setRoundStatus(status);
+        setIsRoundPaused(status.isPaused);
+        setCurrentRound(status.currentRound);
+        // If round is paused, show waiting message
+        if (status.isPaused) {
+          setFeedback('Round completed! Waiting for admin to resume...');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking round status:', error);
+    }
+  }, [quizId]);
+
   // Load questions and round status
   useEffect(() => {
     fetch(`/api/quiz/${quizId}/questions`)
@@ -46,29 +65,9 @@ export default function QuizPage() {
           questionsPerRound
         });
       });
-    
     // Initial round status check
     checkRoundStatus();
   }, [quizId, checkRoundStatus]);
-
-  const checkRoundStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/quiz/${quizId}/round-status`);
-      if (res.ok) {
-        const status = await res.json();
-        setRoundStatus(status);
-        setIsRoundPaused(status.isPaused);
-        setCurrentRound(status.currentRound);
-        
-        // If round is paused, show waiting message
-        if (status.isPaused) {
-          setFeedback('Round completed! Waiting for admin to resume...');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking round status:', error);
-    }
-  }, [quizId]);
 
   // Calculate current round based on question number
   const getCurrentRoundLocal = useCallback((questionIndex) => {
