@@ -32,6 +32,36 @@ export async function POST(req, { params }) {
     
     console.log(`Evaluating quiz ${quizId}: ${users.length} users, ${answers.length} answers`);
     
+    // Validate data integrity
+    const validationErrors = [];
+    
+    // Check for answers without required fields
+    const invalidAnswers = answers.filter(a => !a.userId || !a.questionId || !a.selectedOption);
+    if (invalidAnswers.length > 0) {
+      validationErrors.push(`${invalidAnswers.length} answers missing required fields`);
+      console.warn('Invalid answers found:', invalidAnswers);
+    }
+    
+    // Check for answers with invalid response times
+    const answersWithInvalidTime = answers.filter(a => 
+      typeof a.responseTimeMs !== 'number' || isNaN(a.responseTimeMs) || a.responseTimeMs < 0
+    );
+    if (answersWithInvalidTime.length > 0) {
+      validationErrors.push(`${answersWithInvalidTime.length} answers with invalid response times`);
+      console.warn('Answers with invalid response times:', answersWithInvalidTime);
+    }
+    
+    // Check for users without answers
+    const usersWithoutAnswers = users.filter(u => !answers.some(a => a.userId === u.userId));
+    if (usersWithoutAnswers.length > 0) {
+      validationErrors.push(`${usersWithoutAnswers.length} users without any answers`);
+      console.warn('Users without answers:', usersWithoutAnswers.map(u => u.userId));
+    }
+    
+    if (validationErrors.length > 0) {
+      console.warn('Data validation warnings:', validationErrors);
+    }
+    
     // Prepare user data for batch evaluation
     const usersData = [];
     for (const user of users) {
@@ -44,7 +74,7 @@ export async function POST(req, { params }) {
           answers: userAnswers.map(ans => ({
             questionId: ans.questionId,
             selectedOption: ans.selectedOption,
-            responseTimeMs: ans.serverTimestamp - ans.questionStartTimestamp
+            responseTimeMs: ans.responseTimeMs || (ans.serverTimestamp - ans.questionStartTimestamp) || 0
           }))
         });
       }

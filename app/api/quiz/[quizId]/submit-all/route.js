@@ -1,4 +1,5 @@
 import clientPromise from '@/lib/db.js';
+import { getQuizInfo, getCurrentRound } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const answerSchema = z.object({
@@ -23,25 +24,36 @@ export async function POST(req, { params }) {
     const db = client.db();
     const answersCollection = db.collection('answers');
     
-    // Prepare all answers for batch insertion
-    const answersToInsert = answers.map(answer => ({
-      userId,
-      quizId,
-      questionId: answer.questionId,
-      selectedOption: answer.selectedOption,
-      questionStartTimestamp: answer.questionStartTimestamp,
-      serverTimestamp: Date.now(),
-      responseTimeMs: answer.responseTimeMs
-    }));
+    // Get quiz info to calculate rounds
+    const quizInfo = getQuizInfo(quizId);
+    const questions = quizInfo.questions;
     
-    // Insert all answers in a single operation
-    const result = await answersCollection.insertMany(answersToInsert);
+    // Prepare all answers for batch insertion with round information
+    const answersToInsert = answers.map(answer => {
+      const questionIndex = questions.findIndex(q => q.id === answer.questionId);
+      const round = questionIndex >= 0 ? getCurrentRound(questionIndex, quizInfo.questionsPerRound) : 1;
+      
+      return {
+        userId,
+        quizId,
+        questionId: answer.questionId,
+        selectedOption: answer.selectedOption,
+        questionStartTimestamp: answer.questionStartTimestamp,
+        serverTimestamp: Date.now(),
+        responseTimeMs: answer.responseTimeMs,
+        round
+      };
+    });
+    
+    // Use ordered: false to continue processing even if some documents fail
+    const result = await answersCollection.insertMany(answersToInsert, { ordered: false });
     
     console.log(`Submitted ${result.insertedCount} answers for user ${userId} in quiz ${quizId}`);
     
     return new Response(JSON.stringify({ 
       status: 'ok', 
       submittedCount: result.insertedCount,
+      totalAttempted: answersToInsert.length,
       message: 'All answers submitted successfully'
     }), { status: 201 });
     
@@ -53,6 +65,15 @@ export async function POST(req, { params }) {
         error: 'Invalid input data',
         details: error.errors
       }), { status: 400 });
+    }
+    
+    // Handle duplicate key errors gracefully
+    if (error.code === 11000) {
+      return new Response(JSON.stringify({ 
+        status: 'partial_success',
+        message: 'Some answers were already submitted. New answers have been saved.',
+        submittedCount: error.insertedDocs?.length || 0
+      }), { status: 200 });
     }
     
     return new Response(JSON.stringify({ 

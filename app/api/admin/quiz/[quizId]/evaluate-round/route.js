@@ -61,7 +61,7 @@ export async function POST(req, { params }) {
           answers: userAnswers.map(ans => ({
             questionId: ans.questionId,
             selectedOption: ans.selectedOption,
-            responseTimeMs: ans.responseTimeMs || 0
+            responseTimeMs: ans.responseTimeMs || (ans.serverTimestamp - ans.questionStartTimestamp) || 0
           }))
         });
       }

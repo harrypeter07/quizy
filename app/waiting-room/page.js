@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Image from 'next/image';
 
 export default function WaitingRoom() {
   const router = useRouter();
@@ -11,9 +12,36 @@ export default function WaitingRoom() {
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState(null);
+  const [quizInfo, setQuizInfo] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
   const quizId = Cookies.get('quizId') || 'default';
   const pollTimeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+
+  useEffect(() => {
+    // Fetch quiz and user info
+    const fetchInfo = async () => {
+      try {
+        // Fetch quiz info
+        const quizRes = await fetch('/api/quiz/default/quiz-info');
+        if (quizRes.ok) {
+          const quizData = await quizRes.json();
+          setQuizInfo(quizData);
+        }
+        
+        // Get user info from cookies
+        const displayName = Cookies.get('displayName');
+        const uniqueId = Cookies.get('uniqueId');
+        if (displayName && uniqueId) {
+          setUserInfo({ displayName, uniqueId });
+        }
+      } catch (error) {
+        console.error('Error fetching info:', error);
+      }
+    };
+    
+    fetchInfo();
+  }, []);
 
   useEffect(() => {
     let interval;
@@ -93,66 +121,115 @@ export default function WaitingRoom() {
     return <LoadingSpinner message="Loading waiting room..." />;
   }
 
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Waiting Room</h1>
-          <p className="text-gray-600">Get ready for the quiz!</p>
-        </div>
-        
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            <p className="font-medium">Connection Error</p>
-            <p className="text-sm mt-1">{error}</p>
-            <button 
-              onClick={() => window.location.reload()} 
-              className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors"
-            >
-              Refresh Page
-            </button>
-          </div>
-        )}
-        
-        {!started && !error && (
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 font-medium">Waiting for the quiz to start...</p>
-              {polling && (
-                <div className="mt-3">
-                  <LoadingSpinner message="Checking quiz status..." size="small" inline={true} />
-                </div>
-              )}
+    return (
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/blue-paperboard-bg.jpg"
+          alt="Blue Paperboard Background"
+          fill
+          className="object-cover"
+          priority
+        />
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#14134c]/80 to-[#f8e0a0]/20"></div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="w-full max-w-md mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="mb-6">
+              <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-white/90 rounded-full shadow-2xl mb-4">
+                <div className="text-3xl sm:text-4xl">⏳</div>
+              </div>
             </div>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-3 drop-shadow-lg">
+              Waiting Room
+            </h1>
+            <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2 inline-block mb-4">
+              <p className="text-white font-semibold text-lg sm:text-xl">
+                Student Sports Club RBU
+              </p>
+            </div>
+            <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
+              Get ready for the Feud!
+            </p>
             
-            {!polling && (
-              <button 
-                onClick={() => window.location.reload()} 
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Refresh Status
-              </button>
+            {/* Quiz and User Info */}
+            {quizInfo && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-white/20">
+                <p className="text-white font-bold text-lg mb-2">{quizInfo.name}</p>
+                <div className="text-white/90 text-sm space-y-1">
+                  <p>{quizInfo.questionCount} Questions • {quizInfo.totalRounds} Rounds</p>
+                  {userInfo && (
+                    <p className="font-semibold text-white">
+                      Welcome, {userInfo.displayName}#{userInfo.uniqueId}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        )}
-        
-        {started && countdown !== null && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-            <div className="text-2xl font-bold text-green-800 mb-2">
-              Quiz Starting Soon!
-            </div>
-            <div className="text-4xl font-mono text-green-600">
-              {countdown}s
-            </div>
-            <p className="text-green-700 mt-2">Get ready to answer questions!</p>
+          
+          {/* Main Card */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/20">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                <p className="font-medium">Connection Error</p>
+                <p className="text-sm mt-1">{error}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            )}
+            
+            {!started && !error && (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-[#f8e0a0]/20 to-[#14134c]/10 border border-[#14134c]/20 rounded-xl p-4">
+                  <p className="text-[#14134c] font-medium">Waiting for the Feud to start...</p>
+                  {polling && (
+                    <div className="mt-3">
+                      <LoadingSpinner message="Checking status..." size="small" inline={true} />
+                    </div>
+                  )}
+                </div>
+                
+                {!polling && (
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="w-full bg-gradient-to-r from-[#14134c] to-[#14134c]/90 text-white px-6 py-3 rounded-xl hover:from-[#14134c]/90 hover:to-[#14134c] transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] font-semibold"
+                  >
+                    Refresh Status
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {started && countdown !== null && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6 text-center">
+                <div className="text-2xl font-bold text-green-800 mb-2">
+                  Feud Starting Soon!
+                </div>
+                <div className="text-5xl font-mono text-green-600 font-bold">
+                  {countdown}s
+                </div>
+                <p className="text-green-700 mt-2 font-medium">Get ready to answer questions!</p>
+              </div>
+            )}
+            
+            {!error && (
+              <div className="mt-6 text-[#14134c]/70 text-sm text-center font-medium">
+                Please wait. The Feud will begin automatically when the admin starts it.
+              </div>
+            )}
           </div>
-        )}
-        
-        {!error && (
-          <div className="mt-6 text-gray-500 text-sm">
-            Please wait. The quiz will begin automatically when the admin starts it.
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

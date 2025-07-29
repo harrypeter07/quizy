@@ -17,6 +17,12 @@ export default function AdminPage() {
   const [selectedRound, setSelectedRound] = useState(1);
   const [roundProgressData, setRoundProgressData] = useState(null);
   const [autoTransitionEnabled, setAutoTransitionEnabled] = useState(false);
+  const [showCreateQuiz, setShowCreateQuiz] = useState(false);
+  const [newQuizData, setNewQuizData] = useState({
+    name: '',
+    questionCount: 15,
+    questionsPerRound: 5
+  });
 
   useEffect(() => {
     // Check if token is stored in localStorage
@@ -298,6 +304,42 @@ export default function AdminPage() {
     }
   };
 
+  const handleCreateQuiz = async () => {
+    if (!newQuizData.name.trim()) {
+      setStatus('Please enter a quiz name');
+      return;
+    }
+    
+    setLoading(true);
+    setStatus('Creating quiz...');
+    
+    try {
+      const res = await fetch('/api/admin/quiz/create', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newQuizData)
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(`Quiz "${newQuizData.name}" created successfully!`);
+        setShowCreateQuiz(false);
+        setNewQuizData({ name: '', questionCount: 15, questionsPerRound: 5 });
+        await fetchDashboardData(adminToken); // Refresh dashboard
+      } else {
+        const errorData = await res.json();
+        setStatus(`Failed to create quiz: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('Error creating quiz');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setAdminToken('');
@@ -445,6 +487,65 @@ export default function AdminPage() {
 
             {activeTab === 'quizzes' && (
               <div className="space-y-6">
+                {/* Quiz Creation */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-blue-900">Create New Quiz</h3>
+                    <button
+                      onClick={() => setShowCreateQuiz(!showCreateQuiz)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    >
+                      {showCreateQuiz ? 'Cancel' : 'Create Quiz'}
+                    </button>
+                  </div>
+                  
+                  {showCreateQuiz && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-blue-900 mb-1">Quiz Name</label>
+                        <input
+                          type="text"
+                          value={newQuizData.name}
+                          onChange={(e) => setNewQuizData(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full border border-blue-300 rounded px-3 py-2"
+                          placeholder="Enter quiz name"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-blue-900 mb-1">Total Questions</label>
+                          <input
+                            type="number"
+                            min="5"
+                            max="50"
+                            value={newQuizData.questionCount}
+                            onChange={(e) => setNewQuizData(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))}
+                            className="w-full border border-blue-300 rounded px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-blue-900 mb-1">Questions per Round</label>
+                          <input
+                            type="number"
+                            min="3"
+                            max="10"
+                            value={newQuizData.questionsPerRound}
+                            onChange={(e) => setNewQuizData(prev => ({ ...prev, questionsPerRound: parseInt(e.target.value) }))}
+                            className="w-full border border-blue-300 rounded px-3 py-2"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleCreateQuiz}
+                        className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                      >
+                        Create Quiz
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quiz Selection */}
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold">Quiz Management</h2>
                   <select
@@ -460,71 +561,99 @@ export default function AdminPage() {
                   </select>
                 </div>
 
-                {/* Round Status */}
+                {/* Current Quiz Status */}
                 {roundStatus && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Round Status</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-green-900 mb-3">Current Quiz Status</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <span className="text-blue-700">Current Round:</span>
+                        <span className="text-green-700 font-medium">Quiz:</span>
+                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.name}</span>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Round:</span>
                         <span className="ml-2 font-semibold">{roundStatus.currentRound} of {roundStatus.totalRounds || 3}</span>
                       </div>
                       <div>
-                        <span className="text-blue-700">Status:</span>
+                        <span className="text-green-700 font-medium">Status:</span>
                         <span className={`ml-2 font-semibold ${roundStatus.isActive ? 'text-green-600' : 'text-red-600'}`}>
                           {roundStatus.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-blue-700">Paused:</span>
+                        <span className="text-green-700 font-medium">Paused:</span>
                         <span className={`ml-2 font-semibold ${roundStatus.isPaused ? 'text-orange-600' : 'text-green-600'}`}>
                           {roundStatus.isPaused ? 'Yes' : 'No'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-blue-700">Last Evaluation:</span>
-                        <span className="ml-2 font-semibold">
-                          {roundStatus.lastEvaluationTime ? new Date(roundStatus.lastEvaluationTime).toLocaleTimeString() : 'Never'}
-                        </span>
+                        <span className="text-green-700 font-medium">Users:</span>
+                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.userCount || 0}</span>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Answers:</span>
+                        <span className="ml-2 font-semibold">{dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.answerCount || 0}</span>
                       </div>
                     </div>
                   </div>
                 )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                {/* Main Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <button
                     onClick={() => handleQuizAction('start')}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
                   >
                     Start Quiz
                   </button>
                   <button
                     onClick={() => handleQuizAction('stop')}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                    className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-semibold"
                   >
                     Stop Quiz
                   </button>
                   <button
                     onClick={() => handleQuizAction('evaluate')}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
                   >
                     Evaluate Quiz
                   </button>
-                  <button
-                    onClick={handleAutoTransition}
-                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                  >
-                    Check Auto Transition
-                  </button>
                 </div>
 
+                {/* Round Actions */}
+                {roundStatus && roundStatus.isActive && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-yellow-900 mb-3">Round {roundStatus.currentRound} Actions</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <button
+                        onClick={() => handleRoundAction('pause-round')}
+                        className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                      >
+                        Pause Round
+                      </button>
+                      <button
+                        onClick={() => handleRoundEvaluation(roundStatus.currentRound)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                      >
+                        Evaluate Round {roundStatus.currentRound}
+                      </button>
+                      <button
+                        onClick={handleAutoTransition}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                      >
+                        Auto Transition
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Auto Transition Toggle */}
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold text-yellow-900">Auto Transition</h3>
-                      <p className="text-sm text-yellow-700">
-                        Automatically pause rounds when all questions are answered by multiple users, or advance to next round when complete.
+                      <h3 className="text-lg font-semibold text-gray-900">Auto Transition</h3>
+                      <p className="text-sm text-gray-600">
+                        Automatically pause rounds when complete or advance to next round.
                       </p>
                     </div>
                     <label className="flex items-center cursor-pointer">
@@ -547,66 +676,6 @@ export default function AdminPage() {
                     </label>
                   </div>
                 </div>
-
-                {/* Round Management */}
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Round Management</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                    {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
-                      <button
-                        key={round}
-                        onClick={() => handleRoundAction('start-round', round)}
-                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                      >
-                        Start Round {round}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => handleRoundAction('pause-round')}
-                      className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
-                    >
-                      Pause Round
-                    </button>
-                    <button
-                      onClick={() => handleRoundAction('resume-round')}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      Resume Round
-                    </button>
-                  </div>
-                  
-                  {/* Round Evaluation */}
-                  <div className="border-t pt-4">
-                    <h4 className="text-md font-semibold mb-3">Round Evaluation (Find Top 10)</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {Array.from({ length: roundStatus?.totalRounds || 3 }, (_, i) => i + 1).map(round => (
-                        <button
-                          key={round}
-                          onClick={() => handleRoundEvaluation(round)}
-                          className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                        >
-                          Evaluate Round {round}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {dashboardData && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-4">Selected Quiz: {dashboardData.quizStats.find(q => q.id === selectedQuiz)?.name}</h3>
-                    <div className="bg-gray-50 p-4 rounded">
-                      <h4 className="font-semibold mb-2">Questions:</h4>
-                      <div className="space-y-2">
-                        {dashboardData.quizStats.find(q => q.id === selectedQuiz)?.questions.map((q, idx) => (
-                          <div key={q.id} className="text-sm">
-                            <span className="font-medium">{idx + 1}.</span> {q.text}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
@@ -12,7 +12,25 @@ export default function Onboarding() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [quizInfo, setQuizInfo] = useState(null);
   const router = useRouter();
+
+  useEffect(() => {
+    // Fetch current quiz information
+    const fetchQuizInfo = async () => {
+      try {
+        const res = await fetch('/api/quiz/default/quiz-info');
+        if (res.ok) {
+          const data = await res.json();
+          setQuizInfo(data);
+        }
+      } catch (error) {
+        console.error('Error fetching quiz info:', error);
+      }
+    };
+    
+    fetchQuizInfo();
+  }, []);
 
   const validateForm = () => {
     const newErrors = {};
@@ -86,7 +104,7 @@ export default function Onboarding() {
         Cookies.set('uniqueId', idData.uniqueId, { expires: 30 });
         
         // Show success message before redirecting
-        setStatus(`Welcome! Your unique ID is #${idData.uniqueId}`);
+        setStatus(`Welcome! Your unique ID is #${idData.uniqueId} - Keep this safe!`);
         setTimeout(() => {
           router.replace('/waiting-room');
         }, 2000);
@@ -145,6 +163,20 @@ export default function Onboarding() {
                 Student Sports Club RBU
               </p>
             </div>
+            
+            {/* Quiz Information */}
+            {quizInfo && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-white/20">
+                <p className="text-white font-bold text-lg mb-1">{quizInfo.name}</p>
+                <div className="text-white/90 text-sm space-y-1">
+                  <p>{quizInfo.questionCount} Questions • {quizInfo.totalRounds} Rounds</p>
+                  <p className={`font-semibold ${quizInfo.active ? 'text-green-300' : 'text-yellow-300'}`}>
+                    {quizInfo.active ? '🟢 Quiz is Active' : '🟡 Quiz is Inactive'}
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
               Enter your details to participate
             </p>
@@ -198,8 +230,9 @@ export default function Onboarding() {
               </button>
               
               {status && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm text-center font-medium">
-                  {status}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-6 py-4 rounded-xl text-center font-semibold shadow-lg">
+                  <div className="text-lg mb-2">🎉 Success!</div>
+                  <div className="text-sm">{status}</div>
                 </div>
               )}
             </form>

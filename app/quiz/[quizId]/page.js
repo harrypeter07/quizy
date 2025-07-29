@@ -4,6 +4,7 @@ import Cookies from 'js-cookie';
 import { useParams, useRouter } from 'next/navigation';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { getCurrentRound, shouldPauseAfterQuestion } from '@/lib/questions.js';
+import Image from 'next/image';
 
 const QUESTION_TIME = 15; // seconds
 
@@ -48,8 +49,8 @@ export default function QuizPage() {
     
     checkRoundStatus();
     
-    // Check round status every 2 seconds
-    roundStatusInterval.current = setInterval(checkRoundStatus, 2000);
+    // Check round status more frequently (every 1 second) to stay in sync
+    roundStatusInterval.current = setInterval(checkRoundStatus, 1000);
     
     return () => {
       if (roundStatusInterval.current) {
@@ -90,6 +91,17 @@ export default function QuizPage() {
   useEffect(() => {
     if (questions.length === 0 || isRoundPaused) return;
     
+    // Check if current question belongs to the active round
+    const currentQuestionRound = getCurrentRoundLocal(current);
+    if (currentQuestionRound !== currentRound) {
+      console.log(`Question ${current + 1} (Round ${currentQuestionRound}) doesn't match active round ${currentRound}. Skipping...`);
+      // Auto-advance to next question if not at the end
+      if (current < questions.length - 1) {
+        setTimeout(() => setCurrent(c => c + 1), 1000);
+        return;
+      }
+    }
+    
     setTimer(QUESTION_TIME);
     setSelected(null);
     setFeedback('');
@@ -109,7 +121,7 @@ export default function QuizPage() {
     }, 1000);
     
     return () => clearInterval(timerRef.current);
-  }, [current, questions.length, isRoundPaused]);
+  }, [current, questions.length, isRoundPaused, currentRound]);
 
   const handleSelect = idx => {
     // Prevent multiple clicks on the same option
@@ -131,19 +143,47 @@ export default function QuizPage() {
     const now = Date.now();
     const responseTimeMs = now - questionStart.current;
     
+    // Get the current active round from backend before submitting
+    let currentActiveRound = currentRound;
+    try {
+      const statusRes = await fetch(`/api/quiz/${quizId}/round-status`);
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        currentActiveRound = status.currentRound;
+        setCurrentRound(status.currentRound);
+        setIsRoundPaused(status.isPaused);
+      }
+    } catch (error) {
+      console.error('Error fetching current round status:', error);
+    }
+    
     // Store answer locally
     const answerData = {
       questionId: q.id,
       selectedOption: optionIdx !== null ? String(optionIdx) : '',
       questionStartTimestamp: questionStart.current,
       responseTimeMs,
-      round: getCurrentRoundLocal(current)
+      round: currentActiveRound // Use the current active round from backend
     };
     
     setUserAnswers(prev => [...prev, answerData]);
     setAnsweredThisRound(prev => prev + 1);
     setResponseTime(responseTimeMs);
     setFeedback(auto ? 'Time up! Answer recorded.' : 'Answer recorded!');
+    
+    // Check if this question belongs to the current active round
+    const expectedRoundForQuestion = getCurrentRoundLocal(current);
+    if (expectedRoundForQuestion !== currentActiveRound) {
+      console.warn(`Question ${current + 1} belongs to round ${expectedRoundForQuestion}, but current active round is ${currentActiveRound}`);
+      setFeedback(`Question ${current + 1} is not part of the current round. Skipping...`);
+      setSubmitting(false);
+      
+      // Move to next question
+      if (current < questions.length - 1) {
+        setCurrent(c => c + 1);
+      }
+      return;
+    }
     
     // Submit answer immediately
     await submitAnswer(answerData);
@@ -241,22 +281,61 @@ export default function QuizPage() {
 
   if (isRoundPaused) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-          <div className="text-6xl mb-4">⏸️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Round {currentRound} Completed!</h1>
-          <p className="text-gray-600 mb-6">
-            You&apos;ve answered {answeredThisRound} questions in this round.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 font-semibold">Waiting for admin to resume...</p>
-            <p className="text-blue-600 text-sm mt-2">
-              The admin will evaluate results and start the next round.
-            </p>
-          </div>
-          <div className="mt-6 text-sm text-gray-500">
-            <p>Total questions answered: {userAnswers.length}</p>
-            <p>Current round: {currentRound} of {quizInfo?.totalRounds || 3}</p>
+      <div className="min-h-screen relative overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/blue-paperboard-bg.jpg"
+            alt="Blue Paperboard Background"
+            fill
+            className="object-cover"
+            priority
+          />
+          {/* Overlay for better text readability */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#14134c]/80 to-[#f8e0a0]/20"></div>
+        </div>
+
+        {/* Main Content */}
+        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+          <div className="w-full max-w-md mx-auto">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="mb-6">
+                <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-white/90 rounded-full shadow-2xl mb-4">
+                  <div className="text-3xl sm:text-4xl">⏸️</div>
+                </div>
+              </div>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-3 drop-shadow-lg">
+                Round {currentRound} Completed!
+              </h1>
+              <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2 inline-block mb-4">
+                <p className="text-white font-semibold text-lg sm:text-xl">
+                  Student Sports Club RBU
+                </p>
+              </div>
+              <p className="text-white/90 text-lg sm:text-xl font-medium drop-shadow-md">
+                You&apos;ve answered {answeredThisRound} questions in this round.
+              </p>
+            </div>
+            
+            {/* Main Card */}
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 border border-white/20">
+              <div className="bg-gradient-to-r from-[#f8e0a0]/20 to-[#14134c]/10 border border-[#14134c]/20 rounded-xl p-6 text-center">
+                <p className="text-[#14134c] font-semibold text-lg mb-2">Waiting for admin to resume...</p>
+                <p className="text-[#14134c]/70 text-sm">
+                  The admin will evaluate results and start the next round.
+                </p>
+              </div>
+              
+              <div className="mt-6 text-center space-y-2">
+                <p className="text-[#14134c]/80 text-sm font-medium">
+                  Total questions answered: {userAnswers.length}
+                </p>
+                <p className="text-[#14134c]/80 text-sm font-medium">
+                  Current round: {currentRound} of {quizInfo?.totalRounds || 3}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -265,96 +344,136 @@ export default function QuizPage() {
 
   const q = questions[current];
   const currentQuestionRound = getCurrentRoundLocal(current);
+  const isQuestionInActiveRound = currentQuestionRound === currentRound;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Question {current + 1} of {questions.length}
-              </h1>
-                        <p className="text-sm text-gray-600 mt-1">
-            Round {currentQuestionRound} of {quizInfo?.totalRounds || 3} • {answeredThisRound} answered this round
-          </p>
-            </div>
-            <div className="bg-red-100 border border-red-200 rounded-lg px-4 py-2">
-              <span className="text-red-800 font-mono text-lg">{timer}s</span>
-            </div>
-          </div>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 leading-relaxed">
-              {q.text}
-            </h2>
-            <div className="mt-2 text-sm text-blue-700">
-              Question {current + 1} • Round {currentQuestionRound} of {quizInfo?.totalRounds || 3}
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/blue-paperboard-bg.jpg"
+          alt="Blue Paperboard Background"
+          fill
+          className="object-cover"
+          priority
+        />
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#14134c]/80 to-[#f8e0a0]/20"></div>
+      </div>
 
-        {/* Options */}
-        <div className="grid grid-cols-1 gap-3 mb-6">
-          {q.options.map((opt, idx) => (
-            <button
-              key={idx}
-              className={`p-4 text-left rounded-xl border-2 transition-all duration-200 ${
-                selected === idx 
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg' 
-                  : selected !== null && selected !== idx 
-                    ? 'bg-gray-100 text-gray-500 border-gray-200 opacity-60' 
-                    : clickedOptions.has(idx)
-                      ? 'bg-gray-100 text-gray-500 border-gray-200 opacity-60 cursor-not-allowed'
-                      : 'bg-white text-gray-900 border-gray-200 hover:border-blue-300 hover:shadow-md'
-              }`}
-              disabled={selected !== null || submitting || clickedOptions.has(idx) || isRoundPaused}
-              onClick={() => handleSelect(idx)}
-            >
-              <span className="font-medium">{String.fromCharCode(65 + idx)}.</span> {opt}
-            </button>
-          ))}
-        </div>
-
-        {/* Feedback */}
-        {feedback && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <div className="text-green-800 font-semibold text-center">{feedback}</div>
-            {shouldPauseAfterQuestionLocal(current) && (
-              <div className="text-green-700 text-sm text-center mt-2">
-                Round {currentQuestionRound} will end after this question.
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen p-4 sm:p-6 lg:p-8">
+        <div className="max-w-2xl mx-auto">
+          {/* Warning Banner if question is not in active round */}
+          {!isQuestionInActiveRound && (
+            <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl p-4 mb-4 shadow-lg">
+              <div className="flex flex-col items-center justify-center">
+                <div className="flex items-center mb-3">
+                  <span className="text-2xl mr-2">⚠️</span>
+                  <div className="text-center">
+                    <p className="font-semibold">Question {current + 1} is not part of the current round</p>
+                    <p className="text-sm opacity-90">This question belongs to Round {currentQuestionRound}, but Round {currentRound} is currently active.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCurrent(c => c + 1)}
+                  className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                >
+                  Skip to Next Question
+                </button>
               </div>
-            )}
+            </div>
+          )}
+          
+          {/* Header */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6 border border-white/20">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-[#14134c]">
+                  Question {current + 1} of {questions.length}
+                </h1>
+                <p className="text-sm text-[#14134c]/70 mt-1 font-medium">
+                  Round {currentQuestionRound} of {quizInfo?.totalRounds || 3} • {answeredThisRound} answered this round
+                </p>
+              </div>
+              <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl px-4 py-3 shadow-lg">
+                <span className="font-mono text-xl sm:text-2xl font-bold">{timer}s</span>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-r from-[#f8e0a0]/20 to-[#14134c]/10 border border-[#14134c]/20 rounded-xl p-6 mb-6">
+              <h2 className="text-xl sm:text-2xl font-semibold text-[#14134c] leading-relaxed">
+                {q.text}
+              </h2>
+              <div className="mt-3 text-sm text-[#14134c]/70 font-medium">
+                Question {current + 1} • Round {currentQuestionRound} of {quizInfo?.totalRounds || 3}
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* Response Time */}
-        {responseTime !== null && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-            <span className="text-gray-700 text-sm">
-              Response time: <span className="font-mono font-semibold">{responseTime / 1000}s</span>
-            </span>
+          {/* Options */}
+          <div className="grid grid-cols-1 gap-3 mb-6">
+            {q.options.map((opt, idx) => (
+              <button
+                key={idx}
+                className={`p-4 sm:p-6 text-left rounded-xl border-2 transition-all duration-200 font-medium text-lg ${
+                  selected === idx 
+                    ? 'bg-gradient-to-r from-[#14134c] to-[#14134c]/90 text-white border-[#14134c] shadow-xl transform scale-[1.02]' 
+                    : selected !== null && selected !== idx 
+                      ? 'bg-white/60 text-[#14134c]/50 border-[#14134c]/20 opacity-60' 
+                      : clickedOptions.has(idx)
+                        ? 'bg-white/60 text-[#14134c]/50 border-[#14134c]/20 opacity-60 cursor-not-allowed'
+                        : !isQuestionInActiveRound
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 cursor-not-allowed'
+                          : 'bg-white/95 text-[#14134c] border-[#14134c]/20 hover:border-[#f8e0a0] hover:shadow-lg hover:bg-white transform hover:scale-[1.01]'
+                }`}
+                disabled={selected !== null || submitting || clickedOptions.has(idx) || isRoundPaused || !isQuestionInActiveRound}
+                onClick={() => handleSelect(idx)}
+              >
+                <span className="font-bold mr-3">{String.fromCharCode(65 + idx)}.</span> {opt}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Progress Bar */}
-        <div className="bg-white rounded-xl shadow-lg p-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>Round {currentQuestionRound} Progress</span>
-            <span>{Math.round(((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100}%` }}
-            ></div>
-          </div>
-          <div className="mt-2 text-xs text-gray-500 text-center">
-            {answeredThisRound + 1} of {quizInfo?.questionsPerRound || 5} questions in round {currentQuestionRound}
-          </div>
-          <div className="mt-2 text-xs text-gray-500 text-center">
-            Total: {userAnswers.length} of {questions.length} questions answered
+          {/* Feedback */}
+          {feedback && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 mb-4 shadow-lg">
+              <div className="text-green-800 font-semibold text-center text-lg">{feedback}</div>
+              {shouldPauseAfterQuestionLocal(current) && (
+                <div className="text-green-700 text-sm text-center mt-2 font-medium">
+                  Round {currentQuestionRound} will end after this question.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Response Time */}
+          {responseTime !== null && (
+            <div className="bg-white/80 backdrop-blur-sm border border-[#14134c]/20 rounded-xl p-3 text-center shadow-lg mb-4">
+              <span className="text-[#14134c] text-sm font-medium">
+                Response time: <span className="font-mono font-bold text-lg">{responseTime / 1000}s</span>
+              </span>
+            </div>
+          )}
+
+          {/* Progress Bar */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+            <div className="flex justify-between text-sm text-[#14134c] mb-3 font-semibold">
+              <span>Round {currentQuestionRound} Progress</span>
+              <span>{Math.round(((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100)}%</span>
+            </div>
+            <div className="w-full bg-[#14134c]/20 rounded-full h-3 mb-3">
+              <div 
+                className="bg-gradient-to-r from-[#14134c] to-[#f8e0a0] h-3 rounded-full transition-all duration-300 shadow-lg"
+                style={{ width: `${((answeredThisRound + 1) / (quizInfo?.questionsPerRound || 5)) * 100}%` }}
+              ></div>
+            </div>
+            <div className="text-xs text-[#14134c]/70 text-center font-medium mb-1">
+              {answeredThisRound + 1} of {quizInfo?.questionsPerRound || 5} questions in round {currentQuestionRound}
+            </div>
+            <div className="text-xs text-[#14134c]/70 text-center font-medium">
+              Total: {userAnswers.length} of {questions.length} questions answered
+            </div>
           </div>
         </div>
       </div>
