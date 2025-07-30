@@ -102,24 +102,58 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (selectedQuiz && isAuthenticated) {
-      fetchDashboardData(adminToken);
-      fetchUserCount();
-      // Fetch current quiz info when selected quiz changes
-      fetchCurrentQuizInfo(selectedQuiz);
-      // Removed fetchRoundStatus() and fetchRoundProgress()
+      // Call functions directly to avoid dependency issues
+      const loadData = async () => {
+        try {
+          // Fetch dashboard data
+          const res = await fetch('/api/admin/dashboard', {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setDashboardData(data);
+          }
+          
+          // Fetch user count
+          const userRes = await fetch(`/api/quiz/${selectedQuiz}/user-count`);
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            setUserCountData(userData);
+          } else {
+            setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
+          }
+          
+          // Fetch current quiz info
+          fetchCurrentQuizInfo(selectedQuiz);
+        } catch (error) {
+          console.error('Error loading data:', error);
+        }
+      };
+      
+      loadData();
     }
-  }, [selectedQuiz, isAuthenticated, adminToken, fetchDashboardData, fetchUserCount]);
+  }, [selectedQuiz, isAuthenticated, adminToken]); // Removed function dependencies
 
   // Auto refresh user count every 10 seconds (reduced frequency)
   useEffect(() => {
     if (!isAuthenticated || !selectedQuiz) return;
     
-    const interval = setInterval(() => {
-      fetchUserCount();
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/quiz/${selectedQuiz}/user-count`);
+        if (res.ok) {
+          const data = await res.json();
+          setUserCountData(data);
+        } else {
+          setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
+        }
+      } catch (error) {
+        setUserCountData({ totalUsers: 0, waitingUsers: 0, activeUsers: 0, recentUsers: 0 });
+      }
     }, 10000);
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, selectedQuiz, fetchUserCount]);
+  }, [isAuthenticated, selectedQuiz]); // Removed fetchUserCount dependency
 
   // Auto refresh round progress every 5 seconds when quiz is active
   useEffect(() => {
@@ -400,8 +434,27 @@ export default function AdminPage() {
         } else {
           setStatus(`✅ Results calculated successfully! ${data.totalEvaluated} participants evaluated.`);
         }
-        await fetchDashboardData(adminToken); // Refresh data
-        await fetchUserCount(); // Refresh user count
+        
+        // Refresh data directly instead of using useCallback functions
+        try {
+          // Refresh dashboard data
+          const dashboardRes = await fetch('/api/admin/dashboard', {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (dashboardRes.ok) {
+            const dashboardData = await dashboardRes.json();
+            setDashboardData(dashboardData);
+          }
+          
+          // Refresh user count
+          const userRes = await fetch(`/api/quiz/${selectedQuiz}/user-count`);
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            setUserCountData(userData);
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing data after evaluation:', refreshError);
+        }
       } else {
         const errorData = await res.json();
         setStatus(`Evaluation failed: ${errorData.error}`);

@@ -26,47 +26,67 @@ export async function POST(req) {
 
     // Fetch quiz and questions from the database
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
-    if (!quizDoc || !quizDoc.active) {
-      return new Response(JSON.stringify({ error: 'Quiz is not active' }), { status: 400 });
+    if (!quizDoc) {
+      return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
     }
+    
+    // Check if THIS specific quiz is active
+    if (!quizDoc.active || quizDoc.quizId !== quizId) {
+      return new Response(JSON.stringify({ error: 'This quiz is not active' }), { status: 400 });
+    }
+
     const questions = quizDoc.questions || [];
     const questionIndex = questions.findIndex(q => q.id === questionId);
     if (questionIndex === -1) {
       return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
     }
 
-    try {
-      // Try to insert new answer (will fail if duplicate due to unique index)
-      const answerDoc = {
-        userId,
-        quizId,
-        questionId,
-        selectedOption,
-        serverTimestamp,
-        questionStartTimestamp,
-        responseTimeMs: responseTimeMs || 0
-      };
-      const result = await answers.insertOne(answerDoc);
+    // Check if answer already exists for this user and question
+    const existingAnswer = await answers.findOne({ 
+      userId, 
+      quizId, 
+      questionId 
+    });
+
+    if (existingAnswer) {
+      // Update existing answer instead of creating duplicate
+      const updateResult = await answers.updateOne(
+        { userId, quizId, questionId },
+        { 
+          $set: {
+            selectedOption,
+            serverTimestamp,
+            questionStartTimestamp,
+            responseTimeMs: responseTimeMs || 0
+          }
+        }
+      );
+      
       return new Response(JSON.stringify({ 
-        status: 'ok', 
+        status: 'updated', 
         serverTimestamp,
-        insertedId: result.insertedId 
-      }), { status: 201 });
-    } catch (error) {
-      // Check if it's a duplicate key error
-      if (error.code === 11000) {
-        return new Response(JSON.stringify({ 
-          status: 'duplicate',
-          message: 'Answer already submitted for this question'
-        }), { status: 409 });
-      }
-      // Other database error
-      console.error('Database error:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Failed to save answer',
-        details: error.message 
-      }), { status: 500 });
+        message: 'Answer updated successfully'
+      }), { status: 200 });
     }
+
+    // Insert new answer
+    const answerDoc = {
+      userId,
+      quizId,
+      questionId,
+      selectedOption,
+      serverTimestamp,
+      questionStartTimestamp,
+      responseTimeMs: responseTimeMs || 0
+    };
+    
+    const result = await answers.insertOne(answerDoc);
+    return new Response(JSON.stringify({ 
+      status: 'ok', 
+      serverTimestamp,
+      insertedId: result.insertedId 
+    }), { status: 201 });
+
   } catch (err) {
     console.error('Submit route error:', err);
     return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });

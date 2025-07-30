@@ -32,17 +32,13 @@ export async function POST(req, { params }) {
     const quizStartTime = quiz.startedAt ? new Date(quiz.startedAt).getTime() : 0;
     
     // Get all users and answers for this quiz
-    const users = await db.collection('users').find({}).toArray();
+    const users = await db.collection('users').find({ quizId }).toArray();
     
-    // Filter answers to only include those submitted after the quiz started (current session)
-    const allAnswers = await db.collection('answers').find({ quizId }).toArray();
-    const answers = allAnswers.filter(answer => {
-      // Include answers submitted after quiz started, or if no start time, include all
-      return quizStartTime === 0 || (answer.serverTimestamp && answer.serverTimestamp >= quizStartTime);
-    });
+    // Get all answers for this quiz (don't filter by start time)
+    const answers = await db.collection('answers').find({ quizId }).toArray();
     
     console.log(`[evaluate] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
-    console.log(`[evaluate] Total answers for quiz: ${allAnswers.length}, Current session answers: ${answers.length}`);
+    console.log(`[evaluate] Total answers for quiz: ${answers.length}`);
 
     if (!users.length || !answers.length) {
       return new Response(JSON.stringify({
@@ -91,26 +87,33 @@ export async function POST(req, { params }) {
     for (const user of users) {
       const userAnswers = answers.filter(a => a.userId === user.userId);
       if (userAnswers.length > 0) {
+        const processedAnswers = userAnswers.map(ans => {
+          const responseTime = ans.responseTimeMs || (ans.serverTimestamp - ans.questionStartTimestamp) || 0;
+          // Cap response time at 60 seconds (60000ms) to prevent unrealistic values
+          const cappedResponseTime = Math.min(responseTime, 60000);
+          
+          return {
+            questionId: ans.questionId,
+            selectedOption: ans.selectedOption,
+            responseTimeMs: cappedResponseTime
+          };
+        });
+        
         usersData.push({
           userId: user.userId,
           displayName: user.displayName,
           uniqueId: user.uniqueId,
-          answers: userAnswers.map(ans => {
-            const responseTime = ans.responseTimeMs || (ans.serverTimestamp - ans.questionStartTimestamp) || 0;
-            // Cap response time at 60 seconds (60000ms) to prevent unrealistic values
-            const cappedResponseTime = Math.min(responseTime, 60000);
-            return {
-              questionId: ans.questionId,
-              selectedOption: ans.selectedOption,
-              responseTimeMs: cappedResponseTime
-            };
-          })
+          answers: processedAnswers
         });
       }
     }
     
+    console.log(`[evaluate] Processing ${usersData.length} users with ${answers.length} total answers`);
+    
     // Batch evaluate all users
     const evaluationResults = batchEvaluateUsers(usersData, questions);
+    
+    console.log(`[evaluate] Evaluation completed for ${evaluationResults.length} users`);
     
     // Calculate evaluation statistics
     const stats = calculateEvaluationStats(evaluationResults);
