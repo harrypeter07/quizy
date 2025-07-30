@@ -15,11 +15,22 @@ export default function QuizWaitingPage() {
   const [quizInfo, setQuizInfo] = useState(null);
   const [userId, setUserId] = useState('');
   const [userStats, setUserStats] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
     // Get user ID from cookies
     const id = Cookies.get('userId');
+    const displayName = Cookies.get('displayName');
+    const uniqueId = Cookies.get('uniqueId');
     setUserId(id);
+
+    // Set user info from cookies
+    if (displayName && uniqueId) {
+      setUserInfo({
+        displayName,
+        uniqueId
+      });
+    }
 
     // Try to get answer count and quiz info from localStorage
     const storedQuiz = localStorage.getItem(`quiz_${quizId}`);
@@ -158,9 +169,22 @@ export default function QuizWaitingPage() {
       {/* User ID Badge - Top Right Corner */}
       <div className="absolute top-4 right-4 z-20">
         <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg border border-white/20">
-          <span className="text-sm font-mono text-[#14134c] font-semibold">
-            ID: {userId ? getShortUserId(userId) : '0000'}
-          </span>
+          <div className="text-center">
+            {userInfo ? (
+              <>
+                <div className="text-sm font-semibold text-[#14134c]">
+                  {userInfo.displayName}
+                </div>
+                <div className="text-xs font-mono text-[#14134c]/70">
+                  ID: #{userInfo.uniqueId}
+                </div>
+              </>
+            ) : (
+              <span className="text-sm font-mono text-[#14134c] font-semibold">
+                ID: {userId ? getShortUserId(userId) : '0000'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
