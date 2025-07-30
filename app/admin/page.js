@@ -29,6 +29,10 @@ export default function AdminPage() {
   const [responsesLoading, setResponsesLoading] = useState(false);
   const [showButtonGuide, setShowButtonGuide] = useState(false);
   const [manuallySelectedQuiz, setManuallySelectedQuiz] = useState(false);
+  const [showJsonUpload, setShowJsonUpload] = useState(false);
+  const [jsonUploadData, setJsonUploadData] = useState('');
+  const [jsonUploadLoading, setJsonUploadLoading] = useState(false);
+  const [customQuestionSets, setCustomQuestionSets] = useState([]);
 
   // Calculate isQuizActive early to avoid initialization errors
   const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
@@ -188,6 +192,20 @@ export default function AdminPage() {
       loadQuestionResponses();
     }
   }, [activeTab, selectedQuiz, adminToken]);
+
+  // Fetch custom question sets on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCustomQuestionSets();
+    }
+  }, [isAuthenticated]);
+
+  // Update available question sets when custom sets change
+  useEffect(() => {
+    if (customQuestionSets.length > 0) {
+      fetchAvailableQuestionSets();
+    }
+  }, [customQuestionSets]);
 
   // Auto-refresh responses every 10 seconds when on responses tab and quiz is active
   useEffect(() => {
@@ -406,7 +424,40 @@ export default function AdminPage() {
     setStatus('Creating quiz...');
     
     try {
-      const selectedSet = availableQuestionSets.find(set => set.key === selectedQuestionSet);
+      let selectedSet = availableQuestionSets.find(set => set.key === selectedQuestionSet);
+      
+      // If it's a custom question set, fetch it from the database
+      if (selectedQuestionSet.startsWith('custom_')) {
+        try {
+          const res = await fetch('/api/admin/quiz/upload-questions', {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            const customSet = data.questionSets.find(set => set.key === selectedQuestionSet);
+            if (customSet) {
+              selectedSet = {
+                key: customSet.key,
+                name: customSet.name,
+                questions: customSet.questions
+              };
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching custom question set:', error);
+          setStatus('Error fetching custom question set');
+          setLoading(false);
+          return;
+        }
+      }
+      
+      if (!selectedSet) {
+        setStatus('Selected question set not found');
+        setLoading(false);
+        return;
+      }
+      
       const res = await fetch('/api/admin/quiz/create', {
         method: 'POST',
         headers: { 
@@ -530,6 +581,91 @@ export default function AdminPage() {
       setStatus('Error calculating scores');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJsonUpload = async () => {
+    if (!jsonUploadData.trim()) {
+      setStatus('Please enter JSON data');
+      return;
+    }
+
+    setJsonUploadLoading(true);
+    setStatus('Uploading question set...');
+
+    try {
+      // Parse and validate JSON
+      const parsedData = JSON.parse(jsonUploadData);
+      
+      const res = await fetch('/api/admin/quiz/upload-questions', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ questionSet: parsedData })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data.message);
+        setJsonUploadData('');
+        setShowJsonUpload(false);
+        
+        // Refresh custom question sets
+        await fetchCustomQuestionSets();
+        
+        // Update available question sets
+        await fetchAvailableQuestionSets();
+      } else {
+        const errorData = await res.json();
+        setStatus(`Upload failed: ${errorData.error}`);
+        if (errorData.details) {
+          console.error('Validation details:', errorData.details);
+        }
+      }
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        setStatus('Invalid JSON format. Please check your JSON syntax.');
+      } else {
+        setStatus('Error uploading question set');
+      }
+    } finally {
+      setJsonUploadLoading(false);
+    }
+  };
+
+  const fetchCustomQuestionSets = async () => {
+    try {
+      const res = await fetch('/api/admin/quiz/upload-questions', {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setCustomQuestionSets(data.questionSets || []);
+      }
+    } catch (error) {
+      console.error('Error fetching custom question sets:', error);
+    }
+  };
+
+  const fetchAvailableQuestionSets = async () => {
+    try {
+      // Get the original built-in question sets
+      const { questionSets: builtInSets } = await import('../../lib/questionSets');
+      
+      // Combine built-in and custom question sets
+      const customSets = customQuestionSets.map(set => ({
+        key: set.key,
+        name: `${set.name} (Custom)`,
+        questions: set.questions
+      }));
+      
+      const allSets = [...builtInSets, ...customSets];
+      setAvailableQuestionSets(allSets);
+    } catch (error) {
+      console.error('Error updating available question sets:', error);
     }
   };
 
@@ -682,6 +818,12 @@ export default function AdminPage() {
                   className="bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors"
                 >
                   ➕ Create
+                </button>
+                <button
+                  onClick={() => setShowJsonUpload(!showJsonUpload)}
+                  className="bg-green-500 hover:bg-green-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors"
+                >
+                  📤 Upload JSON
                 </button>
                 <button
                   onClick={() => handleQuizAction('start')}
@@ -870,6 +1012,66 @@ export default function AdminPage() {
                 className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold"
               >
                 🎯 Create Quiz
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* JSON Upload Form - Show when uploading custom question set */}
+        {showJsonUpload && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-green-900">Upload Custom Question Set</h3>
+              <button
+                onClick={() => setShowJsonUpload(false)}
+                className="text-green-600 hover:text-green-800 font-semibold"
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-green-900 mb-1">JSON Question Set</label>
+                <textarea
+                  value={jsonUploadData}
+                  onChange={(e) => setJsonUploadData(e.target.value)}
+                  className="w-full border border-green-300 rounded px-3 py-2 h-64 font-mono text-sm"
+                  placeholder={`{
+  "name": "My Custom Quiz",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "What is your question?",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "correctAnswers": [
+        {"option": 0, "points": 100},
+        {"option": 1, "points": 50}
+      ]
+    }
+  ]
+}`}
+                />
+              </div>
+              
+              <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                <h4 className="font-semibold text-green-900 mb-2">📋 JSON Format Requirements:</h4>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• <strong>name:</strong> String - Name of your question set</li>
+                  <li>• <strong>questions:</strong> Array of question objects</li>
+                  <li>• <strong>id:</strong> String - Unique question identifier</li>
+                  <li>• <strong>text:</strong> String - Question text</li>
+                  <li>• <strong>options:</strong> Array of 2-8 answer options</li>
+                  <li>• <strong>correctAnswers:</strong> Array of correct answers with points</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={handleJsonUpload}
+                disabled={jsonUploadLoading}
+                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold disabled:bg-green-400"
+              >
+                {jsonUploadLoading ? '📤 Uploading...' : '📤 Upload Question Set'}
               </button>
             </div>
           </div>
