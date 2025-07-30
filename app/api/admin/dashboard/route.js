@@ -22,13 +22,8 @@ export async function GET(req) {
     const quizStats = await Promise.all(quizzes.map(async (quiz) => {
       const quizId = quiz.quizId;
       
-      // Get user count for this quiz (users who joined after quiz creation)
-      const quizCreatedAt = new Date(quiz.createdAt).getTime();
-      const allUsers = await db.collection('users').find({}).toArray();
-      const usersForThisQuiz = allUsers.filter(user => {
-        const userJoinedAt = new Date(user.createdAt).getTime();
-        return userJoinedAt >= quizCreatedAt;
-      });
+      // Get user count for this quiz (users who joined for this specific quiz)
+      const usersForThisQuiz = await db.collection('users').find({ quizId }).toArray();
       const userCount = usersForThisQuiz.length;
       
       // Get answer count for this quiz

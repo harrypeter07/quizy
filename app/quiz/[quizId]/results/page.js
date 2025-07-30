@@ -109,8 +109,8 @@ export default function QuizResultsPage() {
               </div>
             ) : (
               <div className="bg-gradient-to-r from-[#f8e0a0] to-[#f8e0a0]/90 text-[#14134c] rounded-xl p-6 mb-8 text-center shadow-xl">
-                <div className="text-2xl font-bold mb-2">Not in Top 20</div>
-                <div className="text-[#14134c]/80">Keep practicing to improve your rank!</div>
+                <div className="text-2xl font-bold mb-2">Results Available</div>
+                <div className="text-[#14134c]/80">Check the leaderboard below for your ranking!</div>
               </div>
             )}
 

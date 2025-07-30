@@ -44,13 +44,13 @@ export default function Onboarding() {
   const validateForm = () => {
     const newErrors = {};
     
-    // Display name validation
+    // Full name validation
     if (!formData.displayName.trim()) {
-      newErrors.displayName = 'Display name is required';
-    } else if (formData.displayName.trim().length < 2) {
-      newErrors.displayName = 'Display name must be at least 2 characters';
-    } else if (formData.displayName.trim().length > 20) {
-      newErrors.displayName = 'Display name must be less than 20 characters';
+      newErrors.displayName = 'Full name is required';
+    } else if (formData.displayName.trim().length < 3) {
+      newErrors.displayName = 'Full name must be at least 3 characters';
+    } else if (formData.displayName.trim().length > 50) {
+      newErrors.displayName = 'Full name must be less than 50 characters';
     }
     
     setErrors(newErrors);
@@ -206,16 +206,16 @@ export default function Onboarding() {
               
               <div>
                 <label htmlFor="displayName" className="block text-sm font-semibold text-[#14134c] mb-3">
-                  Display Name *
+                  Full Name *
                 </label>
                 <input
                   id="displayName"
                   type="text"
-                  maxLength={20}
+                  maxLength={50}
                   className={`w-full px-4 py-4 border-2 rounded-xl focus:ring-2 focus:ring-[#f8e0a0] focus:border-[#f8e0a0] transition-all duration-200 text-lg ${
                     errors.displayName ? 'border-red-300' : 'border-[#14134c]/20'
                   }`}
-                  placeholder="Enter your display name"
+                  placeholder="Enter your full name (e.g., John Smith)"
                   value={formData.displayName}
                   onChange={e => handleInputChange('displayName', e.target.value)}
                 />
@@ -223,7 +223,7 @@ export default function Onboarding() {
                   <p className="mt-2 text-sm text-red-600 font-medium">{errors.displayName}</p>
                 )}
                 <p className="mt-2 text-xs text-[#14134c]/60 font-medium">
-                  {formData.displayName.length}/20 characters
+                  {formData.displayName.length}/50 characters
                 </p>
               </div>
               

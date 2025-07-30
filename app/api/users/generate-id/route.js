@@ -2,7 +2,7 @@ import clientPromise from '@/lib/db.js';
 import { z } from 'zod';
 
 const generateIdSchema = z.object({
-  displayName: z.string().min(2).max(20)
+  displayName: z.string().min(3).max(50)
 });
 
 export async function POST(req) {
