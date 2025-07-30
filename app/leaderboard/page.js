@@ -1,11 +1,13 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Leaderboard() {
   const [leaderboardData, setLeaderboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const tableRef = useRef(null);
 
   useEffect(() => {
     fetchLeaderboard();
@@ -55,8 +57,16 @@ export default function Leaderboard() {
             </div>
           ) : leaderboardData && leaderboardData.entries.length > 0 ? (
             <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Top 10 Participants</h3>
-              
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Top {leaderboardData.entries.length} Participants</h3>
+              {/* Share Leaderboard Button */}
+              <div className="flex justify-end mb-4">
+                <button
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
+                  onClick={() => setShowShareModal(true)}
+                >
+                  Share Leaderboard
+                </button>
+              </div>
               {/* Stats Summary */}
               {leaderboardData.stats && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -78,10 +88,9 @@ export default function Leaderboard() {
                   </div>
                 </div>
               )}
-
               {/* Leaderboard Table */}
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full" ref={tableRef}>
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Rank</th>
@@ -100,9 +109,7 @@ export default function Leaderboard() {
                             {index === 0 && <span className="text-2xl mr-2">🥇</span>}
                             {index === 1 && <span className="text-2xl mr-2">🥈</span>}
                             {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                            <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-gray-900'}`}>
-                              #{entry.rank}
-                            </span>
+                            <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-gray-900'}`}>#{entry.rank}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -128,6 +135,59 @@ export default function Leaderboard() {
                   </tbody>
                 </table>
               </div>
+              {/* Share Leaderboard Modal */}
+              {showShareModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full relative">
+                    <button
+                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold"
+                      onClick={() => setShowShareModal(false)}
+                      aria-label="Close"
+                    >
+                      &times;
+                    </button>
+                    <h2 className="text-xl font-bold mb-4 text-center">Top {leaderboardData.entries.length} Leaderboard</h2>
+                    <div className="overflow-x-auto mb-4">
+                      <table className="w-full border">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="px-2 py-1 text-xs">Rank</th>
+                            <th className="px-2 py-1 text-xs">Name</th>
+                            <th className="px-2 py-1 text-xs">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leaderboardData.entries.map((entry, idx) => (
+                            <tr key={entry.userId}>
+                              <td className="px-2 py-1 text-center">{entry.rank}</td>
+                              <td className="px-2 py-1">{entry.displayName} <span className="text-gray-400 text-xs">#{entry.uniqueId}</span></td>
+                              <td className="px-2 py-1 text-center">{entry.score}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-center">
+                      <button
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
+                        onClick={() => {
+                          if (tableRef.current) {
+                            const range = document.createRange();
+                            range.selectNode(tableRef.current);
+                            window.getSelection().removeAllRanges();
+                            window.getSelection().addRange(range);
+                            document.execCommand('copy');
+                            window.getSelection().removeAllRanges();
+                            alert('Leaderboard copied to clipboard!');
+                          }
+                        }}
+                      >
+                        Copy Table
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8">
