@@ -25,6 +25,14 @@ export default function AdminPage() {
   const [selectedQuestionSet, setSelectedQuestionSet] = useState('default');
   const [availableQuestionSets, setAvailableQuestionSets] = useState(questionSets);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [questionResponses, setQuestionResponses] = useState(null);
+  const [responsesLoading, setResponsesLoading] = useState(false);
+  const [showButtonGuide, setShowButtonGuide] = useState(false);
+  const [manuallySelectedQuiz, setManuallySelectedQuiz] = useState(false);
+
+  // Calculate isQuizActive early to avoid temporal dead zone
+  const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
+  const isQuizDeactivated = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.deactivated;
 
   // Define all callback functions first
   const fetchDashboardData = useCallback(async (token) => {
@@ -76,18 +84,23 @@ export default function AdminPage() {
     }
   }, [fetchDashboardData]);
 
-  // Always use the most recent quiz for all controls and info
+  // Auto-select the most recent quiz only on initial load or if no quiz is selected
   useEffect(() => {
     if (dashboardData && dashboardData.quizStats && dashboardData.quizStats.length > 0) {
-      const latestQuiz = dashboardData.quizStats.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
-      setSelectedQuiz(latestQuiz.id);
+      // Only auto-select if no quiz is currently selected and no manual selection has been made
+      if (!selectedQuiz && !manuallySelectedQuiz) {
+        const latestQuiz = dashboardData.quizStats.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+        setSelectedQuiz(latestQuiz.id);
+      }
     }
-  }, [dashboardData]);
+  }, [dashboardData, selectedQuiz, manuallySelectedQuiz]);
 
   useEffect(() => {
     if (selectedQuiz && isAuthenticated) {
       fetchDashboardData(adminToken);
       fetchUserCount();
+      // Fetch current quiz info when selected quiz changes
+      fetchCurrentQuizInfo(selectedQuiz);
       // Removed fetchRoundStatus() and fetchRoundProgress()
     }
   }, [selectedQuiz, isAuthenticated, adminToken, fetchDashboardData, fetchUserCount]);
@@ -151,6 +164,52 @@ export default function AdminPage() {
     }
   }, [activeTab, selectedQuiz, leaderboardLimit, adminToken]);
 
+  // Auto-load question responses when tab changes
+  useEffect(() => {
+    if (activeTab === 'responses' && selectedQuiz && adminToken) {
+      const loadQuestionResponses = async () => {
+        setResponsesLoading(true);
+        try {
+          const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setQuestionResponses(data);
+          } else {
+            setQuestionResponses(null);
+          }
+        } catch (error) {
+          setQuestionResponses(null);
+        } finally {
+          setResponsesLoading(false);
+        }
+      };
+      loadQuestionResponses();
+    }
+  }, [activeTab, selectedQuiz, adminToken]);
+
+  // Auto-refresh responses every 10 seconds when on responses tab and quiz is active
+  useEffect(() => {
+    if (activeTab === 'responses' && selectedQuiz && adminToken && isQuizActive) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setQuestionResponses(data);
+          }
+        } catch (error) {
+          console.error('Error refreshing responses:', error);
+        }
+      }, 10000); // Refresh every 10 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedQuiz, adminToken, isQuizActive]);
+
   const handleLogin = async () => {
     if (!adminToken.trim()) {
       setStatus('Please enter admin token');
@@ -192,22 +251,74 @@ export default function AdminPage() {
         return;
       }
     }
+
+    // Add confirmation for deactivate action
+    if (action === 'deactivate') {
+      const confirmed = window.confirm(
+        '⚠️ WARNING: This will permanently deactivate the quiz!\n\n' +
+        '• The quiz will be permanently disabled\n' +
+        '• It cannot be started again\n' +
+        '• All data will be preserved but the quiz will be inactive\n\n' +
+        'Are you sure you want to deactivate the quiz?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Add confirmation for reactivate action
+    if (action === 'reactivate') {
+      const confirmed = window.confirm(
+        '✅ REACTIVATE QUIZ\n\n' +
+        '• The quiz will be reactivated and can be used again\n' +
+        '• All existing data will be preserved\n' +
+        '• The quiz will be available for starting\n\n' +
+        'Are you sure you want to reactivate this quiz?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Add confirmation for delete action
+    if (action === 'delete') {
+      const confirmed = window.confirm(
+        '🗑️ PERMANENTLY DELETE QUIZ\n\n' +
+        '⚠️ WARNING: This action cannot be undone!\n\n' +
+        '• The quiz will be permanently deleted\n' +
+        '• All quiz data will be lost\n' +
+        '• All user answers will be deleted\n' +
+        '• All leaderboard entries will be removed\n' +
+        '• User progress will be cleared\n\n' +
+        'Are you absolutely sure you want to delete this quiz?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
     
     setLoading(true);
     setStatus(`${action} quiz...`);
     
     try {
       let endpoint;
+      let method = 'POST';
       if (action === 'start') endpoint = 'start';
       else if (action === 'stop') endpoint = 'stop';
       else if (action === 'restart') endpoint = 'restart';
+      else if (action === 'deactivate') endpoint = 'deactivate';
+      else if (action === 'reactivate') endpoint = 'reactivate';
+      else if (action === 'delete') {
+        endpoint = 'delete';
+        method = 'DELETE';
+      }
       else {
         setStatus('Invalid action');
         return;
       }
       
       const res = await fetch(`/api/admin/quiz/${quizId}/${endpoint}`, {
-        method: 'POST',
+        method: method,
         headers: { 'Authorization': `Bearer ${adminToken}` }
       });
       
@@ -215,9 +326,32 @@ export default function AdminPage() {
         const data = await res.json();
         if (action === 'restart') {
           setStatus(`Quiz restarted successfully! Cleared ${data.clearedAnswers} answers, ${data.clearedLeaderboard} leaderboard entries`);
+        } else if (action === 'deactivate') {
+          setStatus('Quiz deactivated successfully! The quiz is now permanently disabled.');
+        } else if (action === 'reactivate') {
+          setStatus('Quiz reactivated successfully! The quiz can now be used again.');
+        } else if (action === 'delete') {
+          const stats = data.stats;
+          setStatus(`Quiz deleted successfully! Removed ${stats.answersDeleted} answers, ${stats.leaderboardDeleted} leaderboard entries, and cleared progress for ${stats.usersUpdated} users.`);
+          // If we deleted the currently selected quiz, clear the selection
+          if (selectedQuiz === quizId) {
+            setSelectedQuiz('');
+            setCurrentQuizInfo(null);
+          }
         } else {
           setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
         }
+        
+        // If starting a quiz, switch to quizzes tab and set as selected quiz
+        if (action === 'start') {
+          setSelectedQuiz(quizId);
+          setManuallySelectedQuiz(true);
+          setActiveTab('quizzes');
+          // Fetch current quiz info to update the display
+          await fetchCurrentQuizInfo(quizId);
+          setStatus(`Quiz started successfully! Switched to Quizzes tab for full control.`);
+        }
+        
         await fetchDashboardData(adminToken); // Refresh data
       } else {
         const errorData = await res.json();
@@ -264,6 +398,7 @@ export default function AdminPage() {
         // Automatically select the newly created quiz
         if (data.quizId) {
           setSelectedQuiz(data.quizId);
+          setManuallySelectedQuiz(true);
         }
         
         // Immediately fetch the current quiz info to ensure it's displayed
@@ -290,14 +425,19 @@ export default function AdminPage() {
     setStatus('Logged out');
   };
 
-  const fetchCurrentQuizInfo = async () => {
+  const fetchCurrentQuizInfo = async (quizId = null) => {
     try {
-      const res = await fetch('/api/quiz/recent');
+      let endpoint = '/api/quiz/recent';
+      if (quizId) {
+        endpoint = `/api/quiz/${quizId}/quiz-info`;
+      }
+      
+      const res = await fetch(endpoint);
       if (res.ok) {
         const data = await res.json();
         setCurrentQuizInfo(data);
-        // Set the selected quiz to the recent quiz ID
-        setSelectedQuiz(data.quizId);
+        // Set the selected quiz to the quiz ID
+        setSelectedQuiz(data.quizId || quizId);
       } else {
         console.error('Failed to fetch quiz info:', res.status);
       }
@@ -395,18 +535,16 @@ export default function AdminPage() {
     return <LoadingSpinner message={status} />;
   }
 
-  const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 gap-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Admin Dashboard</h1>
             <button
               onClick={handleLogout}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm sm:text-base"
             >
               Logout
             </button>
@@ -414,105 +552,236 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Current Quiz Display */}
         {currentQuizInfo && (
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl p-6 mb-8 shadow-lg">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center">
-              <div className="mb-4 lg:mb-0">
-                <div className="flex items-center mb-2">
-                  <h1 className="text-3xl font-bold">{currentQuizInfo.name || 'Loading...'}</h1>
-                  {isRefreshing && (
-                    <div className="ml-3 flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      <span className="text-sm text-blue-100">Refreshing...</span>
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl p-3 sm:p-4 mb-4 sm:mb-6 shadow-lg">
+            <div className="flex flex-col gap-3">
+              {/* Quiz Info Row */}
+              
+              {/* Button Explanation */}
+              <div className="bg-blue-500/20 rounded-lg p-3 border border-blue-400/30">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold text-blue-100">📋 Admin Controls Guide</h4>
+                  <button
+                    onClick={() => setShowButtonGuide(!showButtonGuide)}
+                    className="text-blue-200 hover:text-blue-100 text-sm"
+                  >
+                    {showButtonGuide ? 'Hide' : 'Show'} Details
+                  </button>
+                </div>
+                {showButtonGuide && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div className="bg-yellow-500/20 rounded p-2 border border-yellow-400/30">
+                      <div className="font-medium text-yellow-100 mb-1">📊 Evaluate Button</div>
+                      <div className="text-yellow-200 text-xs">
+                        • Final scoring and leaderboard creation<br/>
+                        • Use after quiz completion<br/>
+                        • Creates official results<br/>
+                        • Stores in leaderboard collection
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-4 text-blue-100">
-                  <span className="flex items-center">
-                    <span className="mr-2">📝</span>
-                    {currentQuizInfo.questionCount} Questions
-                  </span>
-                  <span className="flex items-center">
-                    <span className="mr-2">🎯</span>
-                    Quiz ID: {selectedQuiz}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-4 text-blue-100 mt-2">
-                  <span className="flex items-center">
-                    <span className="mr-2">📅</span>
-                    Created: {currentQuizInfo.formattedCreatedAt}
-                  </span>
-                </div>
-                {/* Quiz Status Display */}
-                <div className="mt-3">
-                  {isQuizActive ? (
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                      🟢 Quiz Started
-                    </span>
-                  ) : (
-                    <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                      🔴 Quiz Stopped
-                    </span>
-                  )}
-                </div>
+                    <div className="bg-orange-500/20 rounded p-2 border border-orange-400/30">
+                      <div className="font-medium text-orange-100 mb-1">🔍 Validate Button</div>
+                      <div className="text-orange-200 text-xs">
+                        • Real-time data validation<br/>
+                        • Score calculation during quiz<br/>
+                        • Monitor progress and debug<br/>
+                        • Stores validation reports
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold truncate">{currentQuizInfo.name || 'Loading...'}</h1>
+                {isRefreshing && (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                    <span className="text-xs text-blue-100">Refreshing...</span>
+                  </div>
+                )}
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-3">
+              {/* Quiz Details Row */}
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1 sm:gap-3 text-blue-100 text-xs sm:text-sm">
+                <span className="flex items-center">
+                  <span className="mr-1">📝</span>
+                  {currentQuizInfo.questionCount} Questions
+                </span>
+                <span className="flex items-center">
+                  <span className="mr-1">🎯</span>
+                  <span className="truncate">ID: {selectedQuiz}</span>
+                </span>
+                <span className="flex items-center">
+                  <span className="mr-1">📅</span>
+                  <span className="truncate">
+                    {currentQuizInfo.wasReactivated ? 'Reactivated' : 'Created'}: {currentQuizInfo.wasReactivated ? currentQuizInfo.formattedReactivatedAt : currentQuizInfo.formattedCreatedAt}
+                  </span>
+                </span>
+              </div>
+              
+              {/* Quiz Status Row */}
+              <div className="flex items-center gap-2">
+                {isQuizDeactivated ? (
+                  <span className="bg-gray-600 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                    ⚫ Quiz Deactivated
+                  </span>
+                ) : isQuizActive ? (
+                  <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                    🟢 Quiz Started
+                  </span>
+                ) : (
+                  <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                    🔴 Quiz Stopped
+                  </span>
+                )}
+              </div>
+              
+              {/* Quiz Controls Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1 sm:gap-2">
                 <button
                   onClick={handleRefreshQuizDetails}
                   disabled={isRefreshing}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
                 >
-                  {isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+                  {isRefreshing ? '🔄' : '🔄 Refresh'}
                 </button>
                 <button
                   onClick={() => setShowCreateQuiz(!showCreateQuiz)}
-                  className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors"
                 >
-                  ➕ Create New Quiz
+                  ➕ Create
                 </button>
                 <button
                   onClick={() => handleQuizAction('start')}
-                  disabled={isQuizActive || loading}
-                  className="px-6 py-3 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:text-gray-600"
+                  disabled={isQuizActive || isQuizDeactivated || loading}
+                  className="px-2 py-1.5 rounded text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:text-gray-600 transition-colors"
                 >
-                  🚀 Start Quiz
+                  {isQuizDeactivated ? '🚫' : '🚀 Start'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('restart')}
-                  disabled={!isQuizActive || loading}
-                  className="px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 text-white disabled:bg-gray-400 disabled:text-gray-600"
+                  disabled={!isQuizActive || isQuizDeactivated || loading}
+                  className="px-2 py-1.5 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white disabled:bg-gray-400 disabled:text-gray-600 transition-colors"
                 >
-                  🔄 Restart Quiz
+                  🔄 Restart
                 </button>
                 <button
                   onClick={() => handleQuizAction('stop')}
-                  disabled={!isQuizActive || loading}
-                  className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-                    !isQuizActive
+                  disabled={!isQuizActive || isQuizDeactivated || loading}
+                  className={`px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+                    !isQuizActive || isQuizDeactivated
                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                       : 'bg-red-500 hover:bg-red-600 text-white'
                   }`}
                 >
-                  {!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}
+                  {isQuizDeactivated ? '🚫' : !isQuizActive ? '⏹️' : '⏹️ Stop'}
+                </button>
+                <button
+                  onClick={() => handleQuizAction('deactivate')}
+                  disabled={isQuizDeactivated || loading}
+                  className={`px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+                    isQuizDeactivated
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-gray-700 hover:bg-gray-800 text-white'
+                  } disabled:opacity-50`}
+                >
+                  {isQuizDeactivated ? '🚫' : '🚫 Deactivate'}
+                </button>
+                <button
+                  onClick={() => handleQuizAction('reactivate')}
+                  disabled={!isQuizDeactivated || loading}
+                  className={`px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+                    !isQuizDeactivated
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  } disabled:opacity-50`}
+                >
+                  {!isQuizDeactivated ? '✅' : '✅ Reactivate'}
                 </button>
                 <button
                   onClick={() => handleQuizAction('evaluate')}
                   disabled={loading}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
+                  title="📊 Evaluate: Final scoring and leaderboard creation. Use after quiz completion for official results."
                 >
                   📊 Evaluate
                 </button>
                 <button
                   onClick={handleValidateData}
                   disabled={loading}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
+                  title="🔍 Validate: Real-time data validation and score calculation. Use during quiz to monitor progress."
                 >
-                  🔍 Validate Data
+                  🔍 Validate
+                </button>
+                <button
+                  onClick={() => handleQuizAction('delete')}
+                  disabled={loading}
+                  className="bg-red-700 hover:bg-red-800 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  🗑️ Delete
                 </button>
               </div>
+
+              {/* Responses Data Section */}
+              {dashboardData?.quizStats && selectedQuiz && (() => {
+                const quiz = dashboardData.quizStats.find(q => q.id === selectedQuiz);
+                if (!quiz) return null;
+                return (
+                  <div className="mt-3 pt-3 border-t border-blue-400/30">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
+                      {/* User Stats */}
+                      <div className="text-center bg-blue-500/20 rounded p-1">
+                        <div className="font-bold text-blue-100">{quiz.userCount}</div>
+                        <div className="text-blue-200">Users</div>
+                      </div>
+                      <div className="text-center bg-green-500/20 rounded p-1">
+                        <div className="font-bold text-green-100">{quiz.answerCount}</div>
+                        <div className="text-green-200">Answers</div>
+                      </div>
+                      <div className="text-center bg-purple-500/20 rounded p-1">
+                        <div className="font-bold text-purple-100">{quiz.leaderboard.length}</div>
+                        <div className="text-purple-200">Scores</div>
+                      </div>
+                      <div className="text-center bg-yellow-500/20 rounded p-1">
+                        <div className="font-bold text-yellow-100">
+                          {quiz.answerCount > 0 && quiz.userCount > 0 ? Math.round(quiz.answerCount / quiz.userCount) : 0}
+                        </div>
+                        <div className="text-yellow-200">Avg/Q</div>
+                      </div>
+                      {/* Top 2 Leaderboard */}
+                      {quiz.leaderboard.slice(0, 2).map((entry, index) => (
+                        <div key={entry.userId} className="text-center bg-orange-500/20 rounded p-1">
+                          <div className="font-bold text-orange-100 flex items-center justify-center gap-1">
+                            {index === 0 ? '🥇' : '🥈'} {entry.score}
+                          </div>
+                          <div className="text-orange-200 text-xs truncate">
+                            {entry.displayName}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Quick Actions */}
+                    <div className="flex gap-1 mt-2">
+                      <button
+                        onClick={() => setActiveTab('responses')}
+                        className="bg-blue-500/30 hover:bg-blue-500/50 text-blue-100 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                      >
+                        📊 View Responses
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('leaderboard')}
+                        className="bg-green-500/30 hover:bg-green-500/50 text-green-100 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                      >
+                        🏆 View Leaderboard
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -666,22 +935,26 @@ export default function AdminPage() {
 
         {/* Overall Stats */}
         {dashboardData && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Total Users</h3>
-              <p className="text-3xl font-bold text-blue-600">{dashboardData.overallStats.totalUsers}</p>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Total Users</h3>
+              <p className="text-2xl sm:text-3xl font-bold text-blue-600">{dashboardData.overallStats.totalUsers}</p>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Total Answers</h3>
-              <p className="text-3xl font-bold text-green-600">{dashboardData.overallStats.totalAnswers}</p>
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Total Answers</h3>
+              <p className="text-2xl sm:text-3xl font-bold text-green-600">{dashboardData.overallStats.totalAnswers}</p>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Active Quizzes</h3>
-              <p className="text-3xl font-bold text-orange-600">{dashboardData.overallStats.activeQuizzes}</p>
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Active Quizzes</h3>
+              <p className="text-2xl sm:text-3xl font-bold text-orange-600">{dashboardData.overallStats.activeQuizzes}</p>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Total Quizzes</h3>
-              <p className="text-3xl font-bold text-purple-600">{dashboardData.overallStats.totalQuizzes}</p>
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Deactivated Quizzes</h3>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-600">{dashboardData.overallStats.deactivatedQuizzes || 0}</p>
+            </div>
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow col-span-2 lg:col-span-1">
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Total Quizzes</h3>
+              <p className="text-2xl sm:text-3xl font-bold text-purple-600">{dashboardData.overallStats.totalQuizzes}</p>
             </div>
           </div>
         )}
@@ -689,12 +962,12 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8 px-6">
-              {['dashboard', 'quizzes', 'leaderboard', 'progress', 'users'].map((tab) => (
+            <nav className="-mb-px flex flex-wrap space-x-2 sm:space-x-8 px-4 sm:px-6 overflow-x-auto">
+              {['dashboard', 'quizzes', 'leaderboard', 'responses', 'progress', 'users'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
+                  className={`py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm capitalize whitespace-nowrap ${
                     activeTab === tab
                       ? 'border-blue-500 text-blue-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -706,68 +979,146 @@ export default function AdminPage() {
             </nav>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {activeTab === 'dashboard' && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold">Quiz Overview</h2>
+              <div className="space-y-4 sm:space-y-6">
+                <h2 className="text-lg sm:text-xl font-semibold">Quiz Overview</h2>
                 {dashboardData?.quizStats.map((quiz) => (
                   <div key={quiz.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">{quiz.name}</h3>
-                        <p className="text-gray-600">{quiz.questionCount} questions</p>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base sm:text-lg font-semibold truncate">{quiz.name}</h3>
+                        <p className="text-sm sm:text-base text-gray-600">{quiz.questionCount} questions</p>
                       </div>
-                      <div className="flex space-x-2">
-                        <span className={`px-2 py-1 rounded text-sm ${
-                          quiz.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`px-2 py-1 rounded text-xs sm:text-sm ${
+                          quiz.deactivated ? 'bg-gray-600 text-white' : quiz.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {quiz.active ? 'Active' : 'Inactive'}
+                          {quiz.deactivated ? 'Deactivated' : quiz.active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
                     </div>
-                                         <div className="grid grid-cols-3 gap-4 text-sm">
-                       <div>
-                         <span className="text-gray-600">Users:</span>
-                         <span className="ml-1 font-semibold">{quiz.userCount}</span>
-                       </div>
-                       <div>
-                         <span className="text-gray-600">Answers:</span>
-                         <span className="ml-1 font-semibold">{quiz.answerCount}</span>
-                       </div>
-                       <div>
-                         <span className="text-gray-600">Leaderboard:</span>
-                         <span className="ml-1 font-semibold">{quiz.leaderboard.length} entries</span>
-                       </div>
-                     </div>
-                     {quiz.leaderboard.length > 0 && (
-                       <div className="mt-3 text-xs text-gray-500">
-                         Top 3: {quiz.leaderboard.slice(0, 3).map(entry => 
-                           `${entry.displayName}#${entry.uniqueId}`
-                         ).join(', ')}
-                       </div>
-                     )}
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
+                      <div>
+                        <span className="text-gray-600">Users:</span>
+                        <span className="ml-1 font-semibold">{quiz.userCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Answers:</span>
+                        <span className="ml-1 font-semibold">{quiz.answerCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Leaderboard:</span>
+                        <span className="ml-1 font-semibold">{quiz.leaderboard.length} entries</span>
+                      </div>
+                    </div>
+                    {quiz.leaderboard.length > 0 && (
+                      <div className="mt-3 text-xs text-gray-500">
+                        Top 3: {quiz.leaderboard.slice(0, 3).map(entry => 
+                          `${entry.displayName}#${entry.uniqueId}`
+                        ).join(', ')}
+                      </div>
+                    )}
+                    {/* Quiz Action Buttons */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex flex-wrap gap-1 sm:gap-2">
+                        <button
+                          onClick={() => handleQuizAction('start', quiz.id)}
+                          disabled={quiz.active || quiz.deactivated || loading}
+                          className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-colors ${
+                            quiz.active || quiz.deactivated
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-500 hover:bg-green-600 text-white'
+                          }`}
+                        >
+                          {quiz.deactivated ? '🚫 Deactivated' : quiz.active ? '✅ Started' : '🚀 Start'}
+                        </button>
+                        <button
+                          onClick={() => handleQuizAction('stop', quiz.id)}
+                          disabled={!quiz.active || quiz.deactivated || loading}
+                          className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-colors ${
+                            !quiz.active || quiz.deactivated
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-red-500 hover:bg-red-600 text-white'
+                          }`}
+                        >
+                          {quiz.deactivated ? '🚫 Deactivated' : !quiz.active ? '⏹️ Stopped' : '⏹️ Stop'}
+                        </button>
+                        <button
+                          onClick={() => handleQuizAction('deactivate', quiz.id)}
+                          disabled={quiz.deactivated || loading}
+                          className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-colors ${
+                            quiz.deactivated
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-gray-700 hover:bg-gray-800 text-white'
+                          }`}
+                        >
+                          {quiz.deactivated ? '🚫 Already Deactivated' : '🚫 Deactivate'}
+                        </button>
+                        <button
+                          onClick={() => handleQuizAction('reactivate', quiz.id)}
+                          disabled={!quiz.deactivated || loading}
+                          className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-colors ${
+                            !quiz.deactivated
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {!quiz.deactivated ? '✅ Active' : '✅ Reactivate'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedQuiz(quiz.id);
+                            setManuallySelectedQuiz(true);
+                            setActiveTab('quizzes');
+                            setStatus(`Switched to ${quiz.name} for full control.`);
+                          }}
+                          className="px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                        >
+                          🎛️ Manage Quiz
+                        </button>
+                        <button
+                          onClick={() => handleQuizAction('delete', quiz.id)}
+                          disabled={loading}
+                          className="px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium bg-red-700 hover:bg-red-800 text-white transition-colors disabled:opacity-50"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
 
             {activeTab === 'quizzes' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {dashboardData?.quizStats && dashboardData.quizStats.length > 0 && (
                   <div className="mb-4">
-                    <label htmlFor="quiz-select" className="mr-2 font-semibold">Select Quiz:</label>
-                    <select
-                      id="quiz-select"
-                      value={selectedQuiz}
-                      onChange={e => setSelectedQuiz(e.target.value)}
-                      className="px-3 py-2 rounded border"
-                    >
-                      {dashboardData.quizStats.map(quiz => (
-                        <option key={quiz.id} value={quiz.id}>
-                          {quiz.name} ({quiz.id})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                      <div className="flex-1 min-w-0">
+                        <label htmlFor="quiz-select" className="block text-sm sm:text-base font-semibold mb-2">Select Quiz:</label>
+                        <select
+                          id="quiz-select"
+                          value={selectedQuiz}
+                          onChange={e => {
+                            setSelectedQuiz(e.target.value);
+                            setManuallySelectedQuiz(true);
+                            setStatus(`Switched to quiz: ${dashboardData.quizStats.find(q => q.id === e.target.value)?.name}`);
+                          }}
+                          className="w-full px-3 py-2 rounded border text-sm sm:text-base"
+                        >
+                          {dashboardData.quizStats.map(quiz => (
+                            <option key={quiz.id} value={quiz.id}>
+                              {quiz.name} ({quiz.id}) - {quiz.active ? '🟢 Active' : quiz.deactivated ? '⚫ Deactivated' : '🔴 Inactive'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="text-sm sm:text-base text-gray-600">
+                        Currently managing: <span className="font-semibold truncate">{dashboardData.quizStats.find(q => q.id === selectedQuiz)?.name || 'None'}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -783,35 +1134,31 @@ export default function AdminPage() {
                           <div><span className="text-gray-600">Questions:</span> <span className="font-semibold">{quiz.questionCount}</span></div>
                           <div><span className="text-gray-600">Answers:</span> <span className="font-semibold">{quiz.answerCount}</span></div>
                           <div><span className="text-gray-600">Participants:</span> <span className="font-semibold">{quiz.userCount}</span></div>
-                          <div><span className="text-gray-600">Status:</span> <span className={`font-semibold ${quiz.active ? 'text-green-700' : 'text-gray-500'}`}>{quiz.active ? 'Active' : 'Inactive'}</span></div>
+                          <div><span className="text-gray-600">Status:</span> <span className={`font-semibold ${
+                            quiz.deactivated ? 'text-gray-600' : quiz.active ? 'text-green-700' : 'text-gray-500'
+                          }`}>
+                            {quiz.deactivated ? '⚫ Deactivated' : quiz.active ? '🟢 Active' : '🔴 Inactive'}
+                          </span></div>
                         </div>
                       </div>
                     );
                   })()
                 )}
 
-                {dashboardData && selectedQuiz && (
-                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                    <button onClick={() => handleQuizAction('start')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{isQuizActive ? '✅ Quiz Started' : '🚀 Start Quiz'}</button>
-                    <button onClick={() => handleQuizAction('restart')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-purple-500 hover:bg-purple-600 text-white disabled:bg-gray-400 disabled:text-gray-600">🔄 Restart Quiz</button>
-                    <button onClick={() => handleQuizAction('stop')} disabled={!isQuizActive || loading} className="px-6 py-3 rounded-lg font-semibold bg-red-500 hover:bg-red-600 text-white disabled:bg-gray-400 disabled:text-gray-600">{!isQuizActive ? '⏹️ Quiz Stopped' : '⏹️ Stop Quiz'}</button>
 
-                    <button onClick={handleValidateData} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold">📊 Calculate Scores</button>
-                    <button onClick={() => setShowCreateQuiz(!showCreateQuiz)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold">➕ Create New Quiz</button>
-                  </div>
-                )}
 
                 {/* Current Round Information */}
                 {/* Removed roundProgress and round-related UI */}
 
                 {/* Quiz Status Information */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <h3 className="text-lg font-semibold text-blue-900 mb-2">Quiz Control</h3>
-                  <p className="text-sm text-blue-700 mb-3">
-                    Use the Start/Stop buttons in the main header above to control the quiz.
-                  </p>
-                  <div className="text-sm text-blue-600">
-                    <p>• Quiz Status: {isQuizActive ? '🟢 Active' : '🔴 Inactive'}</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-blue-700">
+                      <span className="font-semibold">Quiz Status:</span> {isQuizDeactivated ? '⚫ Deactivated' : isQuizActive ? '🟢 Active' : '🔴 Inactive'}
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      Use controls in the header above
+                    </div>
                   </div>
                 </div>
 
@@ -989,6 +1336,148 @@ export default function AdminPage() {
                     <p className="text-gray-600 mb-4">
                       No leaderboard data available. Make sure to calculate scores first and click &quot;Load Leaderboard&quot;.
                     </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'responses' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Question Response Analysis</h2>
+                  <button
+                    onClick={async () => {
+                      setResponsesLoading(true);
+                      try {
+                        const res = await fetch(`/api/admin/quiz/${selectedQuiz}/question-responses`, {
+                          headers: { 'Authorization': `Bearer ${adminToken}` }
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setQuestionResponses(data);
+                        }
+                      } catch (error) {
+                        console.error('Error loading responses:', error);
+                      } finally {
+                        setResponsesLoading(false);
+                      }
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    disabled={responsesLoading}
+                  >
+                    {responsesLoading ? 'Loading...' : 'Refresh Responses'}
+                  </button>
+                </div>
+
+                {questionResponses ? (
+                  <div className="space-y-6">
+                    {/* Debug Info - Only show in development */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <div className="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">🔧 Debug Information</h3>
+                        <div className="text-sm text-gray-700">
+                          <p>Quiz ID: {selectedQuiz}</p>
+                          <p>Questions: {questionResponses.questionResponses?.length || 0}</p>
+                          <p>Last Updated: {new Date(questionResponses.lastUpdated).toLocaleString()}</p>
+                          <p>Data Structure: {JSON.stringify(Object.keys(questionResponses), null, 2)}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Overall Statistics */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-3">Overall Statistics</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">{questionResponses.overallStats?.totalAnswers || 0}</div>
+                          <div className="text-sm text-blue-700">Total Answers</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600">{questionResponses.overallStats?.activeUsers || 0}</div>
+                          <div className="text-sm text-green-700">Active Users</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-purple-600">{questionResponses.overallStats?.averageResponsesPerQuestion || 0}</div>
+                          <div className="text-sm text-purple-700">Avg Responses/Q</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-orange-600">{questionResponses.overallStats?.completionRate || 0}%</div>
+                          <div className="text-sm text-orange-700">Completion Rate</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question-by-Question Analysis */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Question Response Details</h3>
+                      {questionResponses.questionResponses.map((question, index) => (
+                        <div key={question.questionId} className="bg-white border rounded-lg p-4 shadow-sm">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-semibold text-gray-900">Question {question.questionNumber}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{question.questionText}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-blue-600">{question.totalResponses}</div>
+                              <div className="text-xs text-gray-500">responses</div>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Option Distribution</h5>
+                              <div className="space-y-2">
+                                {Object.entries(question.optionCounts).map(([optionIndex, count]) => (
+                                  <div key={optionIndex} className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Option {parseInt(optionIndex) + 1}:</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-20 bg-gray-200 rounded-full h-2">
+                                        <div 
+                                          className="bg-blue-500 h-2 rounded-full" 
+                                          style={{ width: `${question.totalResponses > 0 ? (count / question.totalResponses * 100) : 0}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-900">{count}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Performance Metrics</h5>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Response Rate:</span>
+                                  <span className="font-medium">{question.responseRate}%</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Avg Response Time:</span>
+                                  <span className="font-medium">{question.averageResponseTime}s</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">📊</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Response Data</h3>
+                    <p className="text-gray-600 mb-4">
+                      No response data available. Make sure the quiz is active and users are answering questions.
+                    </p>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md mx-auto">
+                      <h4 className="font-semibold text-yellow-800 mb-2">💡 Troubleshooting Tips:</h4>
+                      <ul className="text-sm text-yellow-700 text-left space-y-1">
+                        <li>• Ensure the quiz is started and active</li>
+                        <li>• Check if users are connected and answering</li>
+                        <li>• Verify the selected quiz has questions</li>
+                        <li>• Try refreshing the responses data</li>
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>

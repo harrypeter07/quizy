@@ -22,12 +22,29 @@ export async function POST(req, { params }) {
     const client = await clientPromise;
     const db = client.db();
     
+    // Get quiz information to determine the session start time
+    const quiz = await db.collection('quizzes').findOne({ quizId });
+    if (!quiz) {
+      return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
+    }
+    
+    // Get the quiz start time to filter answers from this session only
+    const quizStartTime = quiz.startedAt ? new Date(quiz.startedAt).getTime() : 0;
+    
     // Get all data
-    const [answers, users, questions] = await Promise.all([
+    const [allAnswers, users, questions] = await Promise.all([
       db.collection('answers').find({ quizId }).toArray(),
       db.collection('users').find({}).toArray(),
       Promise.resolve(getQuestions(quizId))
     ]);
+    
+    // Filter answers to only include those submitted after the quiz started (current session)
+    const answers = allAnswers.filter(answer => {
+      return quizStartTime === 0 || (answer.serverTimestamp && answer.serverTimestamp >= quizStartTime);
+    });
+    
+    console.log(`[validate-data] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
+    console.log(`[validate-data] Total answers for quiz: ${allAnswers.length}, Current session answers: ${answers.length}`);
     
     console.log('🔍 VALIDATION DEBUG INFO:');
     console.log(`- Quiz ID: ${quizId}`);
@@ -187,10 +204,13 @@ export async function POST(req, { params }) {
         const question = questions.find(q => q.id === answer.questionId);
         if (!question) continue;
         
-        // Validate response time
-        const validResponseTime = typeof answer.responseTimeMs === 'number' && !isNaN(answer.responseTimeMs) && answer.responseTimeMs >= 0 
+        // Validate response time with safeguards
+        let validResponseTime = typeof answer.responseTimeMs === 'number' && !isNaN(answer.responseTimeMs) && answer.responseTimeMs >= 0 
           ? answer.responseTimeMs 
           : 0;
+        
+        // Cap response time at 60 seconds (60000ms) to prevent unrealistic values
+        validResponseTime = Math.min(validResponseTime, 60000);
         
         // Find matching correct answer
         const matchingAnswer = question.correctAnswers.find(ca => ca.option.toString() === answer.selectedOption);
@@ -199,10 +219,10 @@ export async function POST(req, { params }) {
           // Base points from answer relevance
           const basePoints = matchingAnswer.points || 0;
           
-          // Time bonus calculation (faster = more bonus) - same as evaluation logic
-          const maxTime = 15000;
-          const timeRatio = Math.max(0, 1 - (validResponseTime / maxTime));
-          const timeBonus = Math.floor(basePoints * 0.3 * timeRatio); // Up to 30% bonus for speed
+                  // Time bonus calculation (faster = more bonus) - same as evaluation logic
+        const maxTime = Math.min(15000, 60000); // Cap at 60 seconds
+        const timeRatio = Math.max(0, 1 - (validResponseTime / maxTime));
+        const timeBonus = Math.floor(basePoints * 0.3 * timeRatio); // Up to 30% bonus for speed
           
           // Calculate final score
           const finalScore = basePoints + timeBonus;

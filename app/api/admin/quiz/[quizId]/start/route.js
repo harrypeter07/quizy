@@ -28,15 +28,27 @@ export async function POST(req, { params }) {
     
     // Update quiz status with proper timestamp and start first round
     const countdownStartAt = Date.now();
+    
+    // First check if the quiz was deactivated
+    const existingQuiz = await db.collection('quizzes').findOne({ quizId });
+    const wasDeactivated = existingQuiz?.deactivated || false;
+    
     const updateResult = await db.collection('quizzes').updateOne(
       { quizId },
       { 
         $set: { 
           active: true, 
+          deactivated: false, // Clear the deactivated flag when starting
           startedAt: startedAt,
           stoppedAt: null,
           quizIsStarted: true,
-          countdownStartAt
+          countdownStartAt,
+          // If it was deactivated, update creation time to make it appear as new
+          ...(wasDeactivated && {
+            createdAt: new Date(),
+            updatedAt: Date.now(),
+            reactivatedAt: Date.now()
+          })
         }
       }
     );

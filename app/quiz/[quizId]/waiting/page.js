@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import Image from 'next/image';
+import { getShortUserId } from '../../../../lib/utils';
 
 export default function QuizWaitingPage() {
   const { quizId } = useParams();
@@ -67,7 +68,7 @@ export default function QuizWaitingPage() {
       <div className="absolute top-4 right-4 z-20">
         <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg border border-white/20">
           <span className="text-sm font-mono text-[#14134c] font-semibold">
-            ID: {userId || 'Loading...'}
+            ID: {userId ? getShortUserId(userId) : '0000'}
           </span>
         </div>
       </div>

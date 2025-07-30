@@ -40,11 +40,18 @@ export async function POST(req, { params }) {
       { quizId },
       { 
         $set: { 
+          deactivated: false, // Clear the deactivated flag when restarting
           restartedAt: restartedAt,
           lastRestartAt: restartedAt,
           currentQuestion: 0, // Reset to first question
           questionStartTime: null, // Reset question timer
-          countdownStartAt: Date.now() // Reset countdown
+          countdownStartAt: Date.now(), // Reset countdown
+          // If it was deactivated, update creation time to make it appear as new
+          ...(quiz.deactivated && {
+            createdAt: new Date(),
+            updatedAt: Date.now(),
+            reactivatedAt: Date.now()
+          })
         }
       }
     );
@@ -52,6 +59,10 @@ export async function POST(req, { params }) {
     if (updateResult.matchedCount === 0) {
       return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
     }
+    
+    // Clear all answers for this quiz (from main answers collection)
+    const clearAnswersResult = await db.collection('answers').deleteMany({ quizId });
+    console.log(`[admin-restart] Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
     
     // Clear all user progress for this quiz
     const clearProgressResult = await db.collection('userAnswers').deleteMany({ quizId });
@@ -79,6 +90,7 @@ export async function POST(req, { params }) {
     console.log(`[admin-restart] Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
     
     console.log(`[admin-restart] Quiz ${quizId} restarted successfully.`);
+    console.log(`[admin-restart] - Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
     console.log(`[admin-restart] - Cleared ${clearProgressResult.deletedCount} user answers`);
     console.log(`[admin-restart] - Cleared ${clearLeaderboardResult.deletedCount} leaderboard entries`);
     console.log(`[admin-restart] - Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
@@ -88,7 +100,8 @@ export async function POST(req, { params }) {
       message: 'Quiz restarted successfully',
       quizId,
       restartedAt: restartedAt.getTime(),
-      clearedAnswers: clearProgressResult.deletedCount,
+      clearedAnswers: clearAnswersResult.deletedCount,
+      clearedUserAnswers: clearProgressResult.deletedCount,
       clearedLeaderboard: clearLeaderboardResult.deletedCount,
       clearedRoundData: clearRoundDataResult.deletedCount
     }), { status: 200 });

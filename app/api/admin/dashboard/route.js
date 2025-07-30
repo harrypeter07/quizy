@@ -43,6 +43,7 @@ export async function GET(req) {
         questionCount: quiz.questionCount,
         questions: quiz.questions, // Assuming questions are directly in the quiz object
         active: quiz.active || false,
+        deactivated: quiz.deactivated || false,
         userCount,
         answerCount,
         leaderboard: leaderboard?.entries || [],
@@ -54,7 +55,8 @@ export async function GET(req) {
     // Get overall statistics
     const totalUsers = await db.collection('users').countDocuments();
     const totalAnswers = await db.collection('answers').countDocuments();
-    const activeQuizzes = quizStats.filter(q => q.active).length;
+    const activeQuizzes = quizStats.filter(q => q.active && !q.deactivated).length;
+    const deactivatedQuizzes = quizStats.filter(q => q.deactivated).length;
     const totalQuizzes = quizStats.length;
 
     return new Response(JSON.stringify({
@@ -63,6 +65,7 @@ export async function GET(req) {
         totalUsers,
         totalAnswers,
         activeQuizzes,
+        deactivatedQuizzes,
         totalQuizzes
       }
     }), { status: 200 });

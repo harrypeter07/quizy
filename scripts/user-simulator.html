@@ -337,13 +337,17 @@
 
             async submitAnswer(user, question, selectedOption, startTime) {
                 try {
+                    const responseTime = Date.now() - startTime;
+                    // Cap response time at 60 seconds (60000ms) to prevent unrealistic values
+                    const cappedResponseTime = Math.min(responseTime, 60000);
+                    
                     const answerData = {
                         userId: user.userId,
                         quizId: this.options.quizId,
                         questionId: question.id,
                         selectedOption: selectedOption.toString(),
                         questionStartTimestamp: startTime,
-                        responseTimeMs: Date.now() - startTime,
+                        responseTimeMs: cappedResponseTime,
                         round: Math.floor(question.index / 5) + 1
                     };
 
@@ -355,10 +359,9 @@
 
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     
-                    const responseTime = Date.now() - startTime;
-                    this.results.responseTimes.push(responseTime);
+                    this.results.responseTimes.push(cappedResponseTime);
                     
-                    return { success: true, responseTime };
+                    return { success: true, responseTime: cappedResponseTime };
                 } catch (error) {
                     this.log(`Answer submission failed for ${user.displayName}: ${error.message}`, 'error');
                     return { success: false, error: error.message };
