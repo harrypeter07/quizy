@@ -156,7 +156,7 @@ export default function QuizPage() {
       setClickedOptions(new Set());
       setCurrent(c => c + 1);
     }, 1200);
-  }, [submitting, questions, current, quizId, userAnswers, router]);
+  }, [submitting, questions, current, quizId, router]);
 
   // Timer logic
   useEffect(() => {
