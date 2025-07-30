@@ -267,17 +267,29 @@ export async function POST(req, { params }) {
     console.log(`- Top 5 scores:`, userScores.slice(0, 5).map(u => `${u.userId}: ${u.score}`));
     console.log(`- Average score: ${userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0}`);
     
-    // Store validation report with user scores
+    // Store validation report with user scores (using same structure as evaluate endpoint)
     await db.collection('validationReports').insertOne({
       quizId,
       timestamp: new Date(),
       ...validationReport,
-      participants: {
-        totalUsers: userScores.length,
-        userScores: userScores,
-        averageScore: userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0,
-        highestScore: userScores.length > 0 ? Math.max(...userScores.map(u => u.score)) : 0,
-        lowestScore: userScores.length > 0 ? Math.min(...userScores.map(u => u.score)) : 0
+      evaluation: {
+        totalParticipants: userScores.length,
+        entries: userScores.map(user => ({
+          userId: user.userId,
+          displayName: user.displayName,
+          uniqueId: user.uniqueId,
+          score: user.score,
+          accuracy: user.accuracy,
+          averageResponseTime: user.averageResponseTime,
+          correctAnswers: user.correctAnswers,
+          totalQuestions: user.totalQuestions
+        })),
+        stats: {
+          totalParticipants: userScores.length,
+          averageScore: userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0,
+          highestScore: userScores.length > 0 ? Math.max(...userScores.map(u => u.score)) : 0,
+          lowestScore: userScores.length > 0 ? Math.min(...userScores.map(u => u.score)) : 0
+        }
       }
     });
 

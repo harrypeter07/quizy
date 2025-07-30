@@ -19,7 +19,6 @@ export default function QuizPage() {
   const [feedback, setFeedback] = useState('');
   const [responseTime, setResponseTime] = useState(null);
   const [userAnswers, setUserAnswers] = useState([]); // Store all answers locally
-  const [submittingAll, setSubmittingAll] = useState(false);
   const [clickedOptions, setClickedOptions] = useState(new Set()); // Prevent multiple clicks
   const [quizInfo, setQuizInfo] = useState(null);
   const [userId, setUserId] = useState('');
@@ -40,14 +39,24 @@ export default function QuizPage() {
     setUserId(id);
   }, [quizId]);
 
-  // Check for quiz restart and reset progress
+  // Check for quiz restart and stop status
   useEffect(() => {
-    const checkQuizRestart = async () => {
+    const checkQuizStatus = async () => {
       try {
         const res = await fetch(`/api/quiz/${quizId}/quiz-info`);
         if (res.ok) {
           const quizData = await res.json();
           const lastRestartAt = quizData.lastRestartAt;
+          
+          // Check if quiz was stopped
+          if (!quizData.active) {
+            console.log('Quiz has been stopped by admin');
+            setFeedback('Quiz has been stopped by admin. Redirecting to results...');
+            setTimeout(() => {
+              router.push(`/quiz/${quizId}/results`);
+            }, 2000);
+            return;
+          }
           
           // Check if quiz was restarted after user started
           const userStartTime = localStorage.getItem(`quiz_${quizId}_start_time`);
@@ -65,7 +74,6 @@ export default function QuizPage() {
               setFeedback('');
               setResponseTime(null);
               setSubmitting(false);
-              setSubmittingAll(false);
               
               // Clear local storage for this quiz
               localStorage.removeItem(`answers_${quizId}`);
@@ -78,16 +86,16 @@ export default function QuizPage() {
           }
         }
       } catch (error) {
-        console.error('Error checking quiz restart:', error);
+        console.error('Error checking quiz status:', error);
       }
     };
 
-    // Check for restart every 5 seconds
-    const interval = setInterval(checkQuizRestart, 5000);
-    checkQuizRestart(); // Check immediately
+    // Check for status changes every 5 seconds
+    const interval = setInterval(checkQuizStatus, 5000);
+    checkQuizStatus(); // Check immediately
 
     return () => clearInterval(interval);
-  }, [quizId]);
+  }, [quizId, router]);
 
   // Set start time when user begins quiz
   useEffect(() => {
@@ -100,10 +108,10 @@ export default function QuizPage() {
   const handleAnswer = useCallback(async (optionIdx, auto = false) => {
     if (submitting) return;
     
-    // Add to clicked options to prevent multiple clicks
-    setClickedOptions(prev => new Set([...prev, optionIdx]));
-    setSelected(optionIdx);
+    // Immediately prevent any further interaction
     setSubmitting(true);
+    setSelected(optionIdx);
+    setClickedOptions(prev => new Set([...prev, optionIdx]));
     clearInterval(timerRef.current);
 
     const q = questions[current];
@@ -134,33 +142,19 @@ export default function QuizPage() {
       console.error('Error submitting answer:', error);
     }
 
+    // For last question, redirect immediately without delay
+    if (current >= questions.length - 1) {
+      // Quiz completed - redirect to waiting page immediately
+      router.push(`/quiz/${quizId}/waiting`);
+      return;
+    }
+
+    // For other questions, use the normal delay
     setTimeout(() => {
       setSubmitting(false);
       setSelected(null);
       setClickedOptions(new Set());
-      if (current < questions.length - 1) {
-        setCurrent(c => c + 1);
-      } else {
-        // Submit all answers at the end
-        setSubmittingAll(true);
-        try {
-          const userId = Cookies.get('userId');
-          fetch(`/api/quiz/${quizId}/submit-all`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, quizId, answers: [...userAnswers, answerData] })
-          }).then(() => {
-            router.push(`/quiz/${quizId}/waiting`);
-          }).catch((error) => {
-            console.error('Error submitting all answers:', error);
-          }).finally(() => {
-            setSubmittingAll(false);
-          });
-        } catch (error) {
-          console.error('Error submitting all answers:', error);
-          setSubmittingAll(false);
-        }
-      }
+      setCurrent(c => c + 1);
     }, 1200);
   }, [submitting, questions, current, quizId, userAnswers, router]);
 
@@ -288,15 +282,19 @@ export default function QuizPage() {
             </div>
           )}
 
-          {/* Loading State for Final Submission */}
-          {submittingAll && (
-            <div className="mb-6 p-6 bg-gradient-to-r from-[#14134c]/10 to-[#f8e0a0]/10 border border-[#14134c]/20 rounded-xl text-center">
-              <div className="flex items-center justify-center space-x-3">
-                <div className="w-6 h-6 animate-spin rounded-full border-2 border-[#14134c]/30 border-t-[#14134c]"></div>
-                <span className="text-[#14134c] font-semibold text-lg">Submitting answers...</span>
+          {/* Last Question Indicator */}
+          {current >= questions.length - 1 && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-200 rounded-xl text-center">
+              <div className="text-blue-700 font-semibold text-lg">
+                🎯 Final Question - Choose carefully!
+              </div>
+              <div className="text-blue-600 text-sm mt-1">
+                This is your last answer. Quiz will complete immediately after selection.
               </div>
             </div>
           )}
+
+
 
           {/* Progress Info */}
           <div className="text-center text-[#14134c]/70 text-sm font-medium">

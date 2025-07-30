@@ -1,5 +1,10 @@
+// ========================================
+// TESTING SCRIPT - FOR DEVELOPMENT ONLY
+// ========================================
 // Check current database state
 // Usage: node scripts/check-current-state.js
+// WARNING: This script is for testing/debugging only
+// ========================================
 
 const { MongoClient } = require('mongodb');
 
@@ -42,7 +47,7 @@ async function checkCurrentState() {
     if (validationReports.length > 0) {
       const latest = validationReports[validationReports.length - 1];
       console.log(`   - Latest report: ${new Date(latest.timestamp).toLocaleString()}`);
-      console.log(`   - Participants processed: ${latest.participants?.totalUsers || 0}`);
+      console.log(`   - Participants processed: ${latest.evaluation?.totalParticipants || latest.participants?.totalUsers || 0}`);
       console.log(`   - Issues found: ${latest.issues?.length || 0}`);
     }
     

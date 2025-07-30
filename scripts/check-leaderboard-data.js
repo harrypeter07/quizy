@@ -1,5 +1,10 @@
+// ========================================
+// TESTING SCRIPT - FOR DEVELOPMENT ONLY
+// ========================================
 // Check leaderboard data in validation reports
 // Usage: node scripts/check-leaderboard-data.js
+// WARNING: This script is for testing/debugging only
+// ========================================
 
 const { MongoClient } = require('mongodb');
 
@@ -34,7 +39,26 @@ async function checkLeaderboardData() {
     const latestReport = validationReports[0];
     console.log(`📅 Latest report: ${new Date(latestReport.timestamp).toLocaleString()}`);
     
-    if (latestReport.participants) {
+    // Check for new evaluation structure first
+    if (latestReport.evaluation) {
+      console.log(`👥 Participants processed: ${latestReport.evaluation.totalParticipants}`);
+      console.log(`🏆 Top 5 scores:`);
+      
+      if (latestReport.evaluation.entries && latestReport.evaluation.entries.length > 0) {
+        latestReport.evaluation.entries.slice(0, 5).forEach((user, index) => {
+          console.log(`   ${index + 1}. ${user.displayName} - Score: ${user.score}, Accuracy: ${user.accuracy.toFixed(1)}%`);
+        });
+        
+        console.log(`📊 Statistics:`);
+        console.log(`   - Average Score: ${latestReport.evaluation.stats?.averageScore || 'N/A'}`);
+        console.log(`   - Highest Score: ${latestReport.evaluation.stats?.highestScore || 'N/A'}`);
+        console.log(`   - Lowest Score: ${latestReport.evaluation.stats?.lowestScore || 'N/A'}`);
+      } else {
+        console.log('❌ No user scores found in latest report!');
+      }
+    } 
+    // Fallback to old participants structure for backward compatibility
+    else if (latestReport.participants) {
       console.log(`👥 Participants processed: ${latestReport.participants.totalUsers}`);
       console.log(`🏆 Top 5 scores:`);
       
@@ -51,20 +75,22 @@ async function checkLeaderboardData() {
         console.log('❌ No user scores found in latest report!');
       }
     } else {
-      console.log('❌ No participants data in latest report!');
+      console.log('❌ No evaluation data in latest report!');
     }
     
-    // Check old leaderboard collection
-    const oldLeaderboard = await db.collection('leaderboard').find({ quizId: QUIZ_ID }).toArray();
-    console.log(`\n🏆 Old Leaderboard Collection: ${oldLeaderboard.length} entries`);
+    // Check new leaderboard collection
+    const newLeaderboard = await db.collection('leaderboard').find({ quizId: QUIZ_ID }).toArray();
+    console.log(`\n🏆 New Leaderboard Collection: ${newLeaderboard.length} entries`);
     
-    if (oldLeaderboard.length > 0) {
-      console.log('⚠️ Old leaderboard data exists but is no longer used.');
-      console.log('💡 The system now uses validationReports collection.');
+    if (newLeaderboard.length > 0) {
+      console.log('✅ New leaderboard data exists!');
+      const leaderboard = newLeaderboard[0];
+      console.log(`   - Total Participants: ${leaderboard.totalParticipants}`);
+      console.log(`   - Evaluated At: ${new Date(leaderboard.evaluatedAt).toLocaleString()}`);
     }
     
     console.log('\n💡 NEXT STEPS:');
-    if (validationReports.length > 0 && latestReport.participants && latestReport.participants.userScores.length > 0) {
+    if (validationReports.length > 0 && (latestReport.evaluation || latestReport.participants)) {
       console.log('✅ Leaderboard data exists! Use "Load Leaderboard" in admin dashboard.');
     } else {
       console.log('❌ No leaderboard data found. Run "Calculate Scores" in admin dashboard.');
