@@ -323,7 +323,7 @@ export default function QuizWaitingPage() {
                   <span className="text-green-700 font-semibold text-lg">Processing Results</span>
                 </div>
                 <p className="text-green-700 text-sm">
-                  Please wait while the results are being prepared. You will be redirected to the results page when they are ready.
+                  Please wait while the results are being prepared.
                 </p>
               </div>
 
