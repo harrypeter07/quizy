@@ -127,6 +127,11 @@ export default function QuizPage() {
     };
 
     setUserAnswers(prev => [...prev, answerData]);
+    
+    // Save answers to localStorage with proper key
+    const updatedAnswers = [...userAnswers, answerData];
+    localStorage.setItem(`answers_${quizId}`, JSON.stringify(updatedAnswers));
+    
     setResponseTime(responseTimeMs);
     setFeedback(auto ? 'Time up! Answer recorded.' : 'Answer recorded!');
 
@@ -156,13 +161,18 @@ export default function QuizPage() {
       setClickedOptions(new Set());
       setCurrent(c => c + 1);
     }, 1200);
-  }, [submitting, questions, current, quizId, router]);
+  }, [submitting, questions, current, quizId, router, userAnswers]);
 
-  // Timer logic
+  // Timer logic - Use a more robust timer that continues even when page is not active
   useEffect(() => {
     if (questions.length === 0) return;
+    
     setTimer(QUESTION_TIME);
     questionStart.current = Date.now();
+    
+    // Store timer start time in localStorage for persistence
+    localStorage.setItem(`timer_${quizId}_${current}`, Date.now().toString());
+    
     timerRef.current = setInterval(() => {
       setTimer(t => {
         if (t <= 1) {
@@ -173,8 +183,62 @@ export default function QuizPage() {
         return t - 1;
       });
     }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [current, questions.length, handleAnswer]);
+    
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [current, questions.length, handleAnswer, quizId]);
+
+  // Persist timer state when page becomes hidden/inactive
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden, store current timer state
+        localStorage.setItem(`timer_state_${quizId}_${current}`, JSON.stringify({
+          timer: timer,
+          questionStart: questionStart.current,
+          timestamp: Date.now()
+        }));
+      } else {
+        // Page is visible again, restore timer state if needed
+        const storedState = localStorage.getItem(`timer_state_${quizId}_${current}`);
+        if (storedState) {
+          const state = JSON.parse(storedState);
+          const elapsed = Date.now() - state.timestamp;
+          const newTimer = Math.max(0, state.timer - Math.floor(elapsed / 1000));
+          
+          if (newTimer <= 0) {
+            // Time expired while away, auto-submit
+            handleAnswer(null, true);
+          } else {
+            setTimer(newTimer);
+          }
+          
+          // Clear stored state
+          localStorage.removeItem(`timer_state_${quizId}_${current}`);
+        }
+      }
+    };
+
+    // Also handle page unload to save timer state
+    const handleBeforeUnload = () => {
+      localStorage.setItem(`timer_state_${quizId}_${current}`, JSON.stringify({
+        timer: timer,
+        questionStart: questionStart.current,
+        timestamp: Date.now()
+      }));
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [timer, current, quizId, handleAnswer]);
 
   if (!questions.length) {
     return <LoadingSpinner />;

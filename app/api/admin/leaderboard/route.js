@@ -87,7 +87,8 @@ export async function GET(req, { params }) {
       totalParticipants: leaderboardData.totalParticipants,
       evaluatedAt: leaderboardData.evaluatedAt,
       requestedLimit: limit,
-      actualCount: limitedEntries.length
+      actualCount: limitedEntries.length,
+      source: leaderboardData.evaluationDetails?.source || 'evaluate' // Indicate source
     }), { status: 200 });
 
   } catch (error) {
@@ -177,7 +178,8 @@ export async function POST(req, { params }) {
       totalParticipants: leaderboardData.totalParticipants,
       evaluatedAt: leaderboardData.evaluatedAt,
       requestedLimit: limit,
-      actualCount: limitedEntries.length
+      actualCount: limitedEntries.length,
+      source: leaderboardData.evaluationDetails?.source || 'evaluate' // Indicate source
     }), { status: 200 });
 
   } catch (error) {

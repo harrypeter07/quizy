@@ -552,7 +552,7 @@ export default function AdminPage() {
 
   const handleValidateData = async () => {
     setLoading(true);
-    setStatus('Calculating user scores...');
+    setStatus('Calculating user scores and stopping quiz...');
     
     try {
       const res = await fetch(`/api/admin/quiz/${selectedQuiz}/validate-data`, {
@@ -565,15 +565,20 @@ export default function AdminPage() {
       
       if (res.ok) {
         const data = await res.json();
-        const { validationReport } = data;
+        const { validationReport, leaderboard, stats, totalEvaluated, quizStopped } = data;
         
         if (validationReport.issues.length === 0) {
-          setStatus(`✅ Scores calculated successfully! ${validationReport.evaluation?.totalParticipants || 0} participants processed.`);
+          setStatus(`✅ Scores calculated successfully! ${totalEvaluated || validationReport.evaluation?.totalParticipants || 0} participants processed. Quiz automatically stopped.`);
         } else {
           const issueCount = validationReport.issues.reduce((sum, issue) => sum + issue.count, 0);
-          setStatus(`✅ Scores calculated! ${validationReport.evaluation?.totalParticipants || 0} participants processed. Found ${issueCount} data issues.`);
+          setStatus(`✅ Scores calculated! ${totalEvaluated || validationReport.evaluation?.totalParticipants || 0} participants processed. Found ${issueCount} data issues. Quiz automatically stopped.`);
           console.log('Data validation issues:', validationReport.issues);
         }
+        
+        // Refresh dashboard data to reflect quiz stopping
+        await fetchDashboardData(adminToken);
+        await fetchUserCount();
+        
       } else {
         const errorData = await res.json();
         setStatus(`Score calculation failed: ${errorData.error}`);
@@ -822,19 +827,19 @@ export default function AdminPage() {
                     <div className="bg-yellow-500/20 rounded p-2 border border-yellow-400/30">
                       <div className="font-medium text-yellow-100 mb-1">📊 Evaluate Button</div>
                       <div className="text-yellow-200 text-xs">
-                        • Final scoring and leaderboard creation<br/>
-                        • Use after quiz completion<br/>
-                        • Creates official results<br/>
-                        • Stores in leaderboard collection
+                        • Final evaluation and scoring<br/>
+                        • Creates official leaderboard<br/>
+                        • Stops quiz automatically<br/>
+                        • Use after quiz completion
                       </div>
                     </div>
                     <div className="bg-orange-500/20 rounded p-2 border border-orange-400/30">
                       <div className="font-medium text-orange-100 mb-1">🔍 Validate Button</div>
                       <div className="text-orange-200 text-xs">
-                        • Real-time data validation<br/>
-                        • Score calculation during quiz<br/>
-                        • Monitor progress and debug<br/>
-                        • Stores validation reports
+                        • Data validation and scoring<br/>
+                        • Updates leaderboard<br/>
+                        • Stops quiz automatically<br/>
+                        • Use during or after quiz
                       </div>
                     </div>
                   </div>
@@ -965,7 +970,7 @@ export default function AdminPage() {
                   onClick={handleValidateData}
                   disabled={loading}
                   className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
-                  title="🔍 Validate: Real-time data validation and score calculation. Use during quiz to monitor progress."
+                  title="🔍 Validate: Data validation, score calculation, and quiz stopping. Use during or after quiz for results."
                 >
                   🔍 Validate
                 </button>

@@ -23,7 +23,36 @@ export default function QuizWaitingPage() {
 
     // Try to get answer count and quiz info from localStorage
     const storedQuiz = localStorage.getItem(`quiz_${quizId}`);
-    const answers = JSON.parse(localStorage.getItem(`answers_${quizId}`) || '[]');
+    let answers = [];
+    
+    // Try different localStorage keys for answers
+    const answersKey1 = `answers_${quizId}`;
+    const answersKey2 = `userAnswers_${quizId}`;
+    
+    const storedAnswers1 = localStorage.getItem(answersKey1);
+    const storedAnswers2 = localStorage.getItem(answersKey2);
+    
+    if (storedAnswers1) {
+      try {
+        answers = JSON.parse(storedAnswers1);
+      } catch (e) {
+        console.error('Error parsing answers from localStorage:', e);
+      }
+    } else if (storedAnswers2) {
+      try {
+        answers = JSON.parse(storedAnswers2);
+      } catch (e) {
+        console.error('Error parsing answers from localStorage:', e);
+      }
+    }
+    
+    // Filter out invalid answers (those without selectedOption or with empty selectedOption)
+    const validAnswers = answers.filter(answer => 
+      answer && 
+      answer.selectedOption !== null && 
+      answer.selectedOption !== undefined && 
+      answer.selectedOption !== ''
+    );
     
     if (storedQuiz) {
       const data = JSON.parse(storedQuiz);
@@ -33,19 +62,55 @@ export default function QuizWaitingPage() {
       });
     }
     
-    setAnswerCount(answers.length);
-    setUserAnswers(answers);
+    setAnswerCount(validAnswers.length);
+    setUserAnswers(validAnswers);
     setLoading(false);
 
     // Calculate user stats
-    if (answers.length > 0) {
-      const totalTime = answers.reduce((sum, answer) => sum + (answer.responseTimeMs || 0), 0);
-      const avgTime = totalTime / answers.length;
+    if (validAnswers.length > 0) {
+      const totalTime = validAnswers.reduce((sum, answer) => sum + (answer.responseTimeMs || 0), 0);
+      const avgTime = totalTime / validAnswers.length;
       setUserStats({
-        totalQuestions: answers.length,
+        totalQuestions: validAnswers.length,
         averageResponseTime: avgTime,
         totalTime: totalTime
       });
+    }
+    
+    // If no answers found in localStorage, try to fetch from server as fallback
+    if (validAnswers.length === 0 && id) {
+      const fetchAnswersFromServer = async () => {
+        try {
+          const res = await fetch(`/api/quiz/${quizId}/user-answers?userId=${id}`);
+          if (res.ok) {
+            const serverAnswers = await res.json();
+            if (serverAnswers.answers && serverAnswers.answers.length > 0) {
+              const serverValidAnswers = serverAnswers.answers.filter(answer => 
+                answer && 
+                answer.selectedOption !== null && 
+                answer.selectedOption !== undefined && 
+                answer.selectedOption !== ''
+              );
+              setAnswerCount(serverValidAnswers.length);
+              setUserAnswers(serverValidAnswers);
+              
+              if (serverValidAnswers.length > 0) {
+                const totalTime = serverValidAnswers.reduce((sum, answer) => sum + (answer.responseTimeMs || 0), 0);
+                const avgTime = totalTime / serverValidAnswers.length;
+                setUserStats({
+                  totalQuestions: serverValidAnswers.length,
+                  averageResponseTime: avgTime,
+                  totalTime: totalTime
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching answers from server:', error);
+        }
+      };
+      
+      fetchAnswersFromServer();
     }
   }, [quizId]);
 

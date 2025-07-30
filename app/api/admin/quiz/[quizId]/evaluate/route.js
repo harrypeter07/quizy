@@ -1,6 +1,5 @@
 import clientPromise from '@/lib/db.js';
 import { batchEvaluateUsers, calculateEvaluationStats } from '@/lib/scoring.js';
-import { getQuestions } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const adminToken = process.env.ADMIN_TOKEN;
@@ -52,7 +51,10 @@ export async function POST(req, { params }) {
     }
     
     // Get questions for this quiz
-    const questions = getQuestions(quizId);
+    const questions = quiz.questions || [];
+    if (!questions || questions.length === 0) {
+      return new Response(JSON.stringify({ error: 'No questions found for this quiz' }), { status: 404 });
+    }
     
     // Validate data integrity
     const validationErrors = [];

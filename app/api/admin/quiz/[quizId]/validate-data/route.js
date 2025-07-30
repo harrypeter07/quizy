@@ -1,5 +1,4 @@
 import clientPromise from '@/lib/db.js';
-import { getQuestions } from '@/lib/questions.js';
 import { z } from 'zod';
 
 const adminToken = process.env.ADMIN_TOKEN;
@@ -32,11 +31,16 @@ export async function POST(req, { params }) {
     const quizStartTime = quiz.startedAt ? new Date(quiz.startedAt).getTime() : 0;
     
     // Get all data
-    const [allAnswers, users, questions] = await Promise.all([
+    const [allAnswers, users] = await Promise.all([
       db.collection('answers').find({ quizId }).toArray(),
-      db.collection('users').find({}).toArray(),
-      Promise.resolve(getQuestions(quizId))
+      db.collection('users').find({}).toArray()
     ]);
+    
+    // Get questions from the quiz document
+    const questions = quiz.questions || [];
+    if (!questions || questions.length === 0) {
+      return new Response(JSON.stringify({ error: 'No questions found for this quiz' }), { status: 404 });
+    }
     
     // Filter answers to only include those submitted after the quiz started (current session)
     const answers = allAnswers.filter(answer => {
@@ -293,9 +297,67 @@ export async function POST(req, { params }) {
       }
     });
 
+    // Also update the leaderboard collection for consistency with evaluate endpoint
+    const leaderboardEntries = userScores.map((user, index) => ({
+      rank: index + 1,
+      userId: user.userId,
+      displayName: user.displayName,
+      uniqueId: user.uniqueId,
+      score: user.score,
+      accuracy: user.accuracy,
+      averageResponseTime: user.averageResponseTime,
+      correctAnswers: user.correctAnswers,
+      totalQuestions: user.totalQuestions
+    }));
+
+    const evaluationStats = {
+      totalParticipants: userScores.length,
+      averageScore: userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0,
+      highestScore: userScores.length > 0 ? Math.max(...userScores.map(u => u.score)) : 0,
+      lowestScore: userScores.length > 0 ? Math.min(...userScores.map(u => u.score)) : 0,
+      averageAccuracy: userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.accuracy, 0) / userScores.length) : 0,
+      averageResponseTime: userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.averageResponseTime, 0) / userScores.length) : 0
+    };
+
+    // Update leaderboard collection (same as evaluate endpoint)
+    await db.collection('leaderboard').updateOne(
+      { quizId },
+      { 
+        $set: {
+          quizId,
+          entries: leaderboardEntries,
+          stats: evaluationStats,
+          evaluatedAt: Date.now(),
+          totalParticipants: userScores.length,
+          evaluationDetails: {
+            questionsEvaluated: questions.length,
+            totalAnswersProcessed: answers.length,
+            scoringMethod: 'multi-tier with time bonus',
+            source: 'validate-data' // Indicate this came from validate-data
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    // Stop the quiz after validation (same as evaluate endpoint)
+    await db.collection('quizzes').updateOne(
+      { quizId },
+      { 
+        $set: { 
+          active: false, 
+          stoppedAt: Date.now(),
+          evaluatedAt: Date.now(),
+          evaluationCompleted: true
+        }
+      }
+    );
+
+    console.log(`[validate-data] Quiz ${quizId} stopped after validation`);
+
     return new Response(JSON.stringify({
       success: true,
-      message: 'Data validation completed',
+      message: 'Data validation completed and quiz stopped',
       validationReport: {
         ...validationReport,
         participants: {
@@ -305,7 +367,11 @@ export async function POST(req, { params }) {
           highestScore: userScores.length > 0 ? Math.max(...userScores.map(u => u.score)) : 0,
           lowestScore: userScores.length > 0 ? Math.min(...userScores.map(u => u.score)) : 0
         }
-      }
+      },
+      leaderboard: leaderboardEntries,
+      stats: evaluationStats,
+      totalEvaluated: userScores.length,
+      quizStopped: true
     }), { status: 200 });
     
   } catch (error) {
