@@ -79,12 +79,24 @@ export default function QuizResultsPage() {
               </div>
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-3 drop-shadow-lg">
-              Feud Results
+              SportsFeud Results
             </h1>
             <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2 inline-block mb-4">
               <p className="text-white font-semibold text-lg sm:text-xl">
                 Student Sports Club RBU
               </p>
+            </div>
+            
+            {/* Instagram Follow Section */}
+            <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-xl p-4 mb-6 border border-white/20">
+              <div className="text-center">
+                <div className="text-2xl mb-2">📱</div>
+                <h3 className="text-white font-bold text-lg mb-2">Follow Us on Instagram!</h3>
+                <p className="text-white/90 text-sm mb-3">Stay updated with our latest events and challenges</p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 inline-block">
+                  <p className="text-white font-semibold text-base">@studentsportsclub_rbu</p>
+                </div>
+              </div>
             </div>
           </div>
           
