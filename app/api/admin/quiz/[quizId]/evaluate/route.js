@@ -37,8 +37,8 @@ export async function POST(req, { params }) {
     // Get all answers for this quiz (don't filter by start time)
     const answers = await db.collection('answers').find({ quizId }).toArray();
     
-    console.log(`[evaluate] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
-    console.log(`[evaluate] Total answers for quiz: ${answers.length}`);
+    // console.log(`[evaluate] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
+    // console.log(`[evaluate] Total answers for quiz: ${answers.length}`);
 
     if (!users.length || !answers.length) {
       return new Response(JSON.stringify({
@@ -108,12 +108,12 @@ export async function POST(req, { params }) {
       }
     }
     
-    console.log(`[evaluate] Processing ${usersData.length} users with ${answers.length} total answers`);
+    // console.log(`[evaluate] Processing ${usersData.length} users with ${answers.length} total answers`);
     
     // Batch evaluate all users
     const evaluationResults = batchEvaluateUsers(usersData, questions);
     
-    console.log(`[evaluate] Evaluation completed for ${evaluationResults.length} users`);
+    // console.log(`[evaluate] Evaluation completed for ${evaluationResults.length} users`);
     
     // Calculate evaluation statistics
     const stats = calculateEvaluationStats(evaluationResults);
@@ -183,7 +183,7 @@ export async function POST(req, { params }) {
       }
     );
     
-    console.log(`[evaluate] Quiz ${quizId} automatically stopped after evaluation`);
+    // console.log(`[evaluate] Quiz ${quizId} automatically stopped after evaluation`);
     
     return new Response(JSON.stringify({ 
       status: 'ok', 

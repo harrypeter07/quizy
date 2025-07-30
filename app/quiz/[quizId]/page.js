@@ -50,7 +50,7 @@ export default function QuizPage() {
           
           // Check if quiz was stopped
           if (!quizData.active) {
-            console.log('Quiz has been stopped by admin');
+            // console.log('Quiz has been stopped by admin');
             setFeedback('Quiz has been stopped by admin. Redirecting to results...');
             setTimeout(() => {
               router.push(`/quiz/${quizId}/results`);
@@ -66,7 +66,7 @@ export default function QuizPage() {
             
             if (restartTime > userStart) {
               // Quiz was restarted, reset user progress
-              console.log('Quiz was restarted, resetting progress');
+              // console.log('Quiz was restarted, resetting progress');
               setCurrent(0);
               setUserAnswers([]);
               setSelected(null);

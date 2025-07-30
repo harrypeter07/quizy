@@ -625,7 +625,7 @@ export default function AdminPage() {
         } else {
           const issueCount = validationReport.issues.reduce((sum, issue) => sum + issue.count, 0);
           setStatus(`✅ Scores calculated! ${totalEvaluated || validationReport.evaluation?.totalParticipants || 0} participants processed. Found ${issueCount} data issues. Quiz automatically stopped.`);
-          console.log('Data validation issues:', validationReport.issues);
+          // console.log('Data validation issues:', validationReport.issues);
         }
         
         // Refresh dashboard data to reflect quiz stopping
@@ -1706,7 +1706,7 @@ export default function AdminPage() {
                       <select
                         value={selectedQuiz}
                         onChange={(e) => {
-                          console.log('Leaderboard quiz selection:', e.target.value);
+                          // console.log('Leaderboard quiz selection:', e.target.value);
                           setSelectedQuiz(e.target.value);
                         }}
                         className="w-full border rounded px-3 py-2"

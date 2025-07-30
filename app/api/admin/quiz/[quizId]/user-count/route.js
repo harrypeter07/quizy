@@ -24,7 +24,7 @@ export async function GET(req, { params }) {
     // Get quiz info to check if it's active and get creation time
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
     if (!quizDoc) {
-      console.log(`[user-count] Quiz not found: ${quizId}`);
+      // console.log(`[user-count] Quiz not found: ${quizId}`);
       // Return zero counts if quiz not found
       return new Response(JSON.stringify({
         quizId,
@@ -77,7 +77,7 @@ export async function GET(req, { params }) {
       lastUpdated: Date.now()
     };
     
-    console.log(`[user-count] Quiz: ${quizId}, Total Users: ${usersForThisQuiz.length}, Active Users: ${activeUsers.length}, Waiting: ${waitingUsers.length}, Recent: ${recentUsers.length}`);
+    // console.log(`[user-count] Quiz: ${quizId}, Total Users: ${usersForThisQuiz.length}, Active Users: ${activeUsers.length}, Waiting: ${waitingUsers.length}, Recent: ${recentUsers.length}`);
     
     return new Response(JSON.stringify(userCountData), { status: 200 });
     

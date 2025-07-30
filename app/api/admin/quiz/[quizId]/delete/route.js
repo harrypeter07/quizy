@@ -48,13 +48,13 @@ export async function DELETE(req, { params }) {
 
     const [quizDeleted, answersDeleted, userAnswersDeleted, leaderboardDeleted, roundProgressDeleted, usersUpdated] = deleteResults;
 
-    console.log(`[admin-delete] Quiz ${quizId} deleted successfully`);
-    console.log(`[admin-delete] - Quiz document: ${quizDeleted.deletedCount}`);
-    console.log(`[admin-delete] - Answers: ${answersDeleted.deletedCount}`);
-    console.log(`[admin-delete] - User answers: ${userAnswersDeleted.deletedCount}`);
-    console.log(`[admin-delete] - Leaderboard entries: ${leaderboardDeleted.deletedCount}`);
-    console.log(`[admin-delete] - Round progress: ${roundProgressDeleted.deletedCount}`);
-    console.log(`[admin-delete] - Users updated: ${usersUpdated.modifiedCount}`);
+    // console.log(`[admin-delete] Quiz ${quizId} deleted successfully`);
+    // console.log(`[admin-delete] - Quiz document: ${quizDeleted.deletedCount}`);
+    // console.log(`[admin-delete] - Answers: ${answersDeleted.deletedCount}`);
+    // console.log(`[admin-delete] - User answers: ${userAnswersDeleted.deletedCount}`);
+    // console.log(`[admin-delete] - Leaderboard entries: ${leaderboardDeleted.deletedCount}`);
+    // console.log(`[admin-delete] - Round progress: ${roundProgressDeleted.deletedCount}`);
+    // console.log(`[admin-delete] - Users updated: ${usersUpdated.modifiedCount}`);
 
     return new Response(JSON.stringify({ 
       success: true, 

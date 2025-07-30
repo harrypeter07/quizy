@@ -47,24 +47,24 @@ export async function POST(req, { params }) {
       return quizStartTime === 0 || (answer.serverTimestamp && answer.serverTimestamp >= quizStartTime);
     });
     
-    console.log(`[validate-data] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
-    console.log(`[validate-data] Total answers for quiz: ${allAnswers.length}, Current session answers: ${answers.length}`);
+    // console.log(`[validate-data] Quiz ${quizId} started at: ${new Date(quizStartTime).toISOString()}`);
+    // console.log(`[validate-data] Total answers for quiz: ${allAnswers.length}, Current session answers: ${answers.length}`);
     
-    console.log('🔍 VALIDATION DEBUG INFO:');
-    console.log(`- Quiz ID: ${quizId}`);
-    console.log(`- Total Answers: ${answers.length}`);
-    console.log(`- Total Users in DB: ${users.length}`);
-    console.log(`- Total Questions: ${questions.length}`);
+    // console.log('🔍 VALIDATION DEBUG INFO:');
+    // console.log(`- Quiz ID: ${quizId}`);
+    // console.log(`- Total Answers: ${answers.length}`);
+    // console.log(`- Total Users in DB: ${users.length}`);
+    // console.log(`- Total Questions: ${questions.length}`);
     
-    if (answers.length > 0) {
-      console.log(`- Sample Answer:`, answers[0]);
-      console.log(`- Unique User IDs in Answers:`, [...new Set(answers.map(a => a.userId))].slice(0, 10));
-    }
+    // if (answers.length > 0) {
+    //   console.log(`- Sample Answer:`, answers[0]);
+    //   console.log(`- Unique User IDs in Answers:`, [...new Set(answers.map(a => a.userId))].slice(0, 10));
+    // }
     
-    if (users.length > 0) {
-      console.log(`- Sample User:`, users[0]);
-      console.log(`- User IDs in DB:`, users.map(u => u.userId).slice(0, 10));
-    }
+    // if (users.length > 0) {
+    //   console.log(`- Sample User:`, users[0]);
+    //   console.log(`- User IDs in DB:`, users.map(u => u.userId).slice(0, 10));
+    // }
     
     const validationReport = {
       quizId,
@@ -178,9 +178,9 @@ export async function POST(req, { params }) {
       userAnswerMap.get(answer.userId).push(answer);
     });
     
-    console.log(`🔍 USER SCORE CALCULATION DEBUG:`);
-    console.log(`- Total unique users with answers: ${userAnswerMap.size}`);
-    console.log(`- Users in DB: ${users.length}`);
+    // console.log(`🔍 USER SCORE CALCULATION DEBUG:`);
+    // console.log(`- Total unique users with answers: ${userAnswerMap.size}`);
+    // console.log(`- Users in DB: ${users.length}`);
     
     // Calculate scores for each user using the same logic as the evaluation
     for (const [userId, userAnswers] of userAnswerMap) {
@@ -193,11 +193,11 @@ export async function POST(req, { params }) {
         uniqueId: userId
       };
       
-      console.log(`- Processing user: ${userId}, Answers: ${userAnswers.length}`);
+      // console.log(`- Processing user: ${userId}, Answers: ${userAnswers.length}`);
       
-      if (!user) {
-        console.log(`  ⚠️ User ${userId} not found in DB, using default info`);
-      }
+      // if (!user) {
+      //   console.log(`  ⚠️ User ${userId} not found in DB, using default info`);
+      // }
       
       let totalScore = 0;
       let correctAnswers = 0;
@@ -255,7 +255,7 @@ export async function POST(req, { params }) {
         totalAnswers: userAnswers.length
       });
       
-      console.log(`  ✅ User ${userId} processed - Score: ${totalScore}, Accuracy: ${accuracy.toFixed(1)}%`);
+      // console.log(`  ✅ User ${userId} processed - Score: ${totalScore}, Accuracy: ${accuracy.toFixed(1)}%`);
     }
     
     // Sort users by score (descending)
@@ -266,10 +266,10 @@ export async function POST(req, { params }) {
       user.rank = index + 1;
     });
     
-    console.log(`🎯 FINAL RESULTS:`);
-    console.log(`- Total users processed: ${userScores.length}`);
-    console.log(`- Top 5 scores:`, userScores.slice(0, 5).map(u => `${u.userId}: ${u.score}`));
-    console.log(`- Average score: ${userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0}`);
+    // console.log(`🎯 FINAL RESULTS:`);
+    // console.log(`- Total users processed: ${userScores.length}`);
+    // console.log(`- Top 5 scores:`, userScores.slice(0, 5).map(u => `${u.userId}: ${u.score}`));
+    // console.log(`- Average score: ${userScores.length > 0 ? Math.round(userScores.reduce((sum, u) => sum + u.score, 0) / userScores.length) : 0}`);
     
     // Store validation report with user scores (using same structure as evaluate endpoint)
     await db.collection('validationReports').insertOne({
@@ -353,7 +353,7 @@ export async function POST(req, { params }) {
       }
     );
 
-    console.log(`[validate-data] Quiz ${quizId} stopped after validation`);
+    // console.log(`[validate-data] Quiz ${quizId} stopped after validation`);
 
     return new Response(JSON.stringify({
       success: true,

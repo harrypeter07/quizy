@@ -6,7 +6,7 @@ export async function GET(req, { params }) {
   const awaitedParams = await params;
   const parseResult = quizIdSchema.safeParse(awaitedParams);
   if (!parseResult.success) {
-    console.log('[user-count] Invalid quizId', awaitedParams);
+    // console.log('[user-count] Invalid quizId', awaitedParams);
     return new Response(JSON.stringify({ error: 'Invalid quizId' }), { status: 400 });
   }
   const { quizId } = awaitedParams;
@@ -16,7 +16,7 @@ export async function GET(req, { params }) {
     // Get quiz info to check if it's active and get creation time
     const quizDoc = await db.collection('quizzes').findOne({ quizId });
     if (!quizDoc) {
-      console.log(`[user-count] Quiz not found: ${quizId}`);
+      // console.log(`[user-count] Quiz not found: ${quizId}`);
       // Return zero counts if quiz not found
       return new Response(JSON.stringify({
         quizId,
@@ -62,7 +62,7 @@ export async function GET(req, { params }) {
       })),
       lastUpdated: Date.now()
     };
-    console.log('[user-count] Returning:', userCountData);
+    // console.log('[user-count] Returning:', userCountData);
     return new Response(JSON.stringify(userCountData), { status: 200 });
   } catch (error) {
     console.error('[user-count] Error:', error);

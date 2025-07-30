@@ -18,7 +18,7 @@ export async function POST(req, { params }) {
   const { quizId } = awaitedParams;
   
   try {
-    console.log(`[admin-start] Attempting to start quiz: ${quizId}`);
+    // console.log(`[admin-start] Attempting to start quiz: ${quizId}`);
     const client = await clientPromise;
     const db = client.db();
     // This updates the quizzes collection
@@ -56,8 +56,8 @@ export async function POST(req, { params }) {
     if (!updatedQuiz || !Array.isArray(updatedQuiz.questions) || updatedQuiz.questions.length === 0) {
       return new Response(JSON.stringify({ error: 'Quiz cannot be started without a valid question set.' }), { status: 400 });
     }
-    console.log('[admin-start] Updated quiz document:', updatedQuiz);
-    console.log(`[admin-start] Quiz ${quizId} started successfully.`);
+    // console.log('[admin-start] Updated quiz document:', updatedQuiz);
+    // console.log(`[admin-start] Quiz ${quizId} started successfully.`);
 
     return new Response(JSON.stringify({ 
       success: true, 

@@ -18,7 +18,7 @@ export async function POST(req, { params }) {
   const { quizId } = awaitedParams;
 
   try {
-    console.log(`[admin-restart] Attempting to restart quiz: ${quizId}`);
+    // console.log(`[admin-restart] Attempting to restart quiz: ${quizId}`);
     const client = await clientPromise;
     const db = client.db();
     
@@ -62,11 +62,11 @@ export async function POST(req, { params }) {
     
     // Clear all answers for this quiz (from main answers collection)
     const clearAnswersResult = await db.collection('answers').deleteMany({ quizId });
-    console.log(`[admin-restart] Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
+    // console.log(`[admin-restart] Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
     
     // Clear all user progress for this quiz
     const clearProgressResult = await db.collection('userAnswers').deleteMany({ quizId });
-    console.log(`[admin-restart] Cleared progress for ${clearProgressResult.deletedCount} user answers`);
+    // console.log(`[admin-restart] Cleared progress for ${clearProgressResult.deletedCount} user answers`);
     
     // Clear user quiz progress
     const clearUserProgressResult = await db.collection('users').updateMany(
@@ -83,17 +83,17 @@ export async function POST(req, { params }) {
     
     // Clear leaderboard entries for this quiz
     const clearLeaderboardResult = await db.collection('leaderboard').deleteMany({ quizId });
-    console.log(`[admin-restart] Cleared ${clearLeaderboardResult.deletedCount} leaderboard entries`);
+    // console.log(`[admin-restart] Cleared ${clearLeaderboardResult.deletedCount} leaderboard entries`);
     
     // Clear any round-specific data
     const clearRoundDataResult = await db.collection('roundProgress').deleteMany({ quizId });
-    console.log(`[admin-restart] Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
+    // console.log(`[admin-restart] Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
     
-    console.log(`[admin-restart] Quiz ${quizId} restarted successfully.`);
-    console.log(`[admin-restart] - Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
-    console.log(`[admin-restart] - Cleared ${clearProgressResult.deletedCount} user answers`);
-    console.log(`[admin-restart] - Cleared ${clearLeaderboardResult.deletedCount} leaderboard entries`);
-    console.log(`[admin-restart] - Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
+    // console.log(`[admin-restart] Quiz ${quizId} restarted successfully.`);
+    // console.log(`[admin-restart] - Cleared ${clearAnswersResult.deletedCount} answers from main collection`);
+    // console.log(`[admin-restart] - Cleared ${clearProgressResult.deletedCount} user answers`);
+    // console.log(`[admin-restart] - Cleared ${clearLeaderboardResult.deletedCount} leaderboard entries`);
+    // console.log(`[admin-restart] - Cleared ${clearRoundDataResult.deletedCount} round progress entries`);
 
     return new Response(JSON.stringify({ 
       success: true, 
