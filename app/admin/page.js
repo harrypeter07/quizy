@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { questionSets } from '../../lib/questionSets';
 
@@ -34,6 +34,8 @@ export default function AdminPage() {
   const [jsonUploadLoading, setJsonUploadLoading] = useState(false);
   const [customQuestionSets, setCustomQuestionSets] = useState([]);
   const [uploadSuccess, setUploadSuccess] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const shareTableRef = useRef(null);
 
   // Calculate isQuizActive early to avoid initialization errors
   const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
@@ -1694,6 +1696,14 @@ export default function AdminPage() {
                     >
                       {leaderboardLoading ? 'Loading...' : 'Load Leaderboard'}
                     </button>
+                    {leaderboardData && leaderboardData.entries && leaderboardData.entries.length > 0 && (
+                      <button
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
+                        onClick={() => setShowShareModal(true)}
+                      >
+                        Share Leaderboard
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1786,7 +1796,7 @@ export default function AdminPage() {
                     {/* Leaderboard Table */}
                     <div className="bg-white border rounded-lg overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full" ref={shareTableRef}>
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Rank</th>
@@ -1803,9 +1813,7 @@ export default function AdminPage() {
                                     {index === 0 && <span className="text-2xl mr-2">🥇</span>}
                                     {index === 1 && <span className="text-2xl mr-2">🥈</span>}
                                     {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-gray-900'}`}>
-                                      #{entry.rank}
-                                    </span>
+                                    <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-gray-900'}`}>#{entry.rank}</span>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3">
@@ -1826,6 +1834,59 @@ export default function AdminPage() {
                         </table>
                       </div>
                     </div>
+                    {/* Share Leaderboard Modal */}
+                    {showShareModal && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full relative">
+                          <button
+                            className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold"
+                            onClick={() => setShowShareModal(false)}
+                            aria-label="Close"
+                          >
+                            &times;
+                          </button>
+                          <h2 className="text-xl font-bold mb-4 text-center">Top {leaderboardData.actualCount} Leaderboard</h2>
+                          <div className="overflow-x-auto mb-4">
+                            <table className="w-full border">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="px-2 py-1 text-xs">Rank</th>
+                                  <th className="px-2 py-1 text-xs">Name</th>
+                                  <th className="px-2 py-1 text-xs">Score</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {leaderboardData.entries.map((entry, idx) => (
+                                  <tr key={entry.userId}>
+                                    <td className="px-2 py-1 text-center">{entry.rank}</td>
+                                    <td className="px-2 py-1">{entry.displayName} <span className="text-gray-400 text-xs">#{entry.uniqueId}</span></td>
+                                    <td className="px-2 py-1 text-center">{entry.score}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="text-center">
+                            <button
+                              className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
+                              onClick={() => {
+                                if (shareTableRef.current) {
+                                  const range = document.createRange();
+                                  range.selectNode(shareTableRef.current);
+                                  window.getSelection().removeAllRanges();
+                                  window.getSelection().addRange(range);
+                                  document.execCommand('copy');
+                                  window.getSelection().removeAllRanges();
+                                  alert('Leaderboard copied to clipboard!');
+                                }
+                              }}
+                            >
+                              Copy Table
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8">
