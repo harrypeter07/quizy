@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [jsonUploadData, setJsonUploadData] = useState('');
   const [jsonUploadLoading, setJsonUploadLoading] = useState(false);
   const [customQuestionSets, setCustomQuestionSets] = useState([]);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
 
   // Calculate isQuizActive early to avoid initialization errors
   const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
@@ -586,16 +587,39 @@ export default function AdminPage() {
 
   const handleJsonUpload = async () => {
     if (!jsonUploadData.trim()) {
-      setStatus('Please enter JSON data');
+      setStatus('❌ Please enter JSON data');
       return;
     }
 
     setJsonUploadLoading(true);
-    setStatus('Uploading question set...');
+    setStatus('🔍 Validating JSON format...');
 
     try {
       // Parse and validate JSON
-      const parsedData = JSON.parse(jsonUploadData);
+      let parsedData;
+      try {
+        parsedData = JSON.parse(jsonUploadData);
+        setStatus('✅ JSON format valid. Validating question structure...');
+      } catch (parseError) {
+        setStatus('❌ Invalid JSON format. Please check your JSON syntax.');
+        setJsonUploadLoading(false);
+        return;
+      }
+
+      // Basic validation before sending to server
+      if (!parsedData.name || !parsedData.questions || !Array.isArray(parsedData.questions)) {
+        setStatus('❌ Invalid question set format. Missing required fields (name, questions).');
+        setJsonUploadLoading(false);
+        return;
+      }
+
+      if (parsedData.questions.length === 0) {
+        setStatus('❌ Question set must contain at least one question.');
+        setJsonUploadLoading(false);
+        return;
+      }
+
+      setStatus('📤 Uploading question set to server...');
       
       const res = await fetch('/api/admin/quiz/upload-questions', {
         method: 'POST',
@@ -608,31 +632,88 @@ export default function AdminPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setStatus(data.message);
+        setStatus(`✅ ${data.message} 🎉`);
         setJsonUploadData('');
         setShowJsonUpload(false);
         
+        // Set upload success details
+        setUploadSuccess({
+          name: parsedData.name,
+          questionCount: parsedData.questions.length,
+          message: data.message,
+          details: data.details
+        });
+        
         // Refresh custom question sets
+        setStatus('🔄 Updating question set list...');
         await fetchCustomQuestionSets();
         
         // Update available question sets
         await fetchAvailableQuestionSets();
+        
+        // Show final success message
+        setTimeout(() => {
+          setStatus(`✅ Question set "${parsedData.name}" uploaded successfully! You can now use it when creating quizzes.`);
+          // Clear success notification after 5 seconds
+          setTimeout(() => setUploadSuccess(null), 5000);
+        }, 1000);
+        
       } else {
         const errorData = await res.json();
-        setStatus(`Upload failed: ${errorData.error}`);
+        let errorMessage = `❌ Upload failed: ${errorData.error}`;
+        
         if (errorData.details) {
           console.error('Validation details:', errorData.details);
+          if (Array.isArray(errorData.details)) {
+            const detailMessages = errorData.details.map(detail => 
+              `• ${detail.path?.join('.') || 'unknown'}: ${detail.message}`
+            ).join('\n');
+            errorMessage += `\n\nValidation errors:\n${detailMessages}`;
+          }
         }
+        
+        setStatus(errorMessage);
       }
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        setStatus('Invalid JSON format. Please check your JSON syntax.');
-      } else {
-        setStatus('Error uploading question set');
-      }
+      console.error('Upload error:', error);
+      setStatus('❌ Network error. Please check your connection and try again.');
     } finally {
       setJsonUploadLoading(false);
     }
+  };
+
+  const loadSampleJson = () => {
+    const sampleJson = {
+      "name": "Sample Quiz",
+      "questions": [
+        {
+          "id": "q1",
+          "text": "What is the capital of France?",
+          "options": ["London", "Berlin", "Paris", "Madrid"],
+          "correctAnswers": [
+            {"option": 2, "points": 100}
+          ]
+        },
+        {
+          "id": "q2",
+          "text": "Which planet is closest to the Sun?",
+          "options": ["Venus", "Mercury", "Earth", "Mars"],
+          "correctAnswers": [
+            {"option": 1, "points": 100}
+          ]
+        },
+        {
+          "id": "q3",
+          "text": "What is 2 + 2?",
+          "options": ["3", "4", "5", "6"],
+          "correctAnswers": [
+            {"option": 1, "points": 50},
+            {"option": 2, "points": 25}
+          ]
+        }
+      ]
+    };
+    setJsonUploadData(JSON.stringify(sampleJson, null, 2));
   };
 
   const fetchCustomQuestionSets = async () => {
@@ -1017,11 +1098,49 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Success Notification */}
+        {uploadSuccess && (
+          <div className="fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50 max-w-md">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <span className="text-green-600 text-lg">✅</span>
+                </div>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-green-900">
+                  Upload Successful!
+                </h3>
+                <div className="mt-1 text-sm text-green-700">
+                  <p><strong>{uploadSuccess.name}</strong></p>
+                  <p>{uploadSuccess.questionCount} questions uploaded</p>
+                  {uploadSuccess.details?.warnings && uploadSuccess.details.warnings.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-yellow-600 font-medium">⚠️ Warnings:</p>
+                      <ul className="text-xs text-yellow-700 list-disc list-inside">
+                        {uploadSuccess.details.warnings.map((warning, index) => (
+                          <li key={index}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setUploadSuccess(null)}
+                className="ml-3 text-green-400 hover:text-green-600"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* JSON Upload Form - Show when uploading custom question set */}
         {showJsonUpload && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-green-900">Upload Custom Question Set</h3>
+              <h3 className="text-lg font-semibold text-green-900">📤 Upload Custom Question Set</h3>
               <button
                 onClick={() => setShowJsonUpload(false)}
                 className="text-green-600 hover:text-green-800 font-semibold"
@@ -1032,11 +1151,18 @@ export default function AdminPage() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-green-900 mb-1">JSON Question Set</label>
+                <label className="block text-sm font-medium text-green-900 mb-1">
+                  JSON Question Set
+                  {jsonUploadData.trim() && (
+                    <span className="ml-2 text-xs text-green-600">
+                      ({jsonUploadData.length} characters)
+                    </span>
+                  )}
+                </label>
                 <textarea
                   value={jsonUploadData}
                   onChange={(e) => setJsonUploadData(e.target.value)}
-                  className="w-full border border-green-300 rounded px-3 py-2 h-64 font-mono text-sm"
+                  className="w-full border border-green-300 rounded px-3 py-2 h-64 font-mono text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   placeholder={`{
   "name": "My Custom Quiz",
   "questions": [
@@ -1054,25 +1180,103 @@ export default function AdminPage() {
                 />
               </div>
               
+              {/* Real-time validation feedback */}
+              {jsonUploadData.trim() && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h4 className="font-semibold text-blue-900 mb-2">🔍 Validation Status:</h4>
+                  {(() => {
+                    try {
+                      const parsed = JSON.parse(jsonUploadData);
+                      const hasName = parsed.name && typeof parsed.name === 'string';
+                      const hasQuestions = parsed.questions && Array.isArray(parsed.questions);
+                      const questionCount = hasQuestions ? parsed.questions.length : 0;
+                      
+                      return (
+                        <div className="text-sm text-blue-800 space-y-1">
+                          <div className={`flex items-center ${hasName ? 'text-green-600' : 'text-red-600'}`}>
+                            {hasName ? '✅' : '❌'} Name: {hasName ? 'Valid' : 'Missing or invalid'}
+                          </div>
+                          <div className={`flex items-center ${hasQuestions ? 'text-green-600' : 'text-red-600'}`}>
+                            {hasQuestions ? '✅' : '❌'} Questions array: {hasQuestions ? 'Valid' : 'Missing or invalid'}
+                          </div>
+                          <div className={`flex items-center ${questionCount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {questionCount > 0 ? '✅' : '❌'} Question count: {questionCount} {questionCount === 0 ? '(at least 1 required)' : ''}
+                          </div>
+                          <div className="text-blue-600">
+                            📝 JSON syntax: Valid
+                          </div>
+                        </div>
+                      );
+                    } catch (error) {
+                      return (
+                        <div className="text-sm text-red-600">
+                          ❌ JSON syntax error: {error.message}
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+              
               <div className="bg-green-100 border border-green-300 rounded-lg p-3">
                 <h4 className="font-semibold text-green-900 mb-2">📋 JSON Format Requirements:</h4>
                 <ul className="text-sm text-green-800 space-y-1">
-                  <li>• <strong>name:</strong> String - Name of your question set</li>
-                  <li>• <strong>questions:</strong> Array of question objects</li>
-                  <li>• <strong>id:</strong> String - Unique question identifier</li>
-                  <li>• <strong>text:</strong> String - Question text</li>
-                  <li>• <strong>options:</strong> Array of 2-8 answer options</li>
-                  <li>• <strong>correctAnswers:</strong> Array of correct answers with points</li>
+                  <li>• <strong>name:</strong> String - Name of your question set (required)</li>
+                  <li>• <strong>questions:</strong> Array of question objects (1-100 questions)</li>
+                  <li>• <strong>id:</strong> String - Unique question identifier (required)</li>
+                  <li>• <strong>text:</strong> String - Question text (required)</li>
+                  <li>• <strong>options:</strong> Array of 2-8 answer options (required)</li>
+                  <li>• <strong>correctAnswers:</strong> Array of correct answers with points (required)</li>
+                  <li>• <strong>option:</strong> Number (0-7) - Index of correct option</li>
+                  <li>• <strong>points:</strong> Number (0+) - Points for this answer</li>
                 </ul>
               </div>
               
-              <button
-                onClick={handleJsonUpload}
-                disabled={jsonUploadLoading}
-                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold disabled:bg-green-400"
-              >
-                {jsonUploadLoading ? '📤 Uploading...' : '📤 Upload Question Set'}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleJsonUpload}
+                  disabled={jsonUploadLoading || !jsonUploadData.trim()}
+                  className="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold disabled:bg-green-400 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {jsonUploadLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      📤 Upload Question Set
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => setJsonUploadData('')}
+                  disabled={jsonUploadLoading || !jsonUploadData.trim()}
+                  className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Clear
+                </button>
+                
+                <button
+                  onClick={loadSampleJson}
+                  disabled={jsonUploadLoading}
+                  className="px-4 py-3 border border-blue-300 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-blue-600"
+                  title="Load sample JSON format"
+                >
+                  📋 Sample
+                </button>
+              </div>
+              
+              {/* Upload status */}
+              {jsonUploadLoading && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center text-blue-800">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    Processing upload...
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
