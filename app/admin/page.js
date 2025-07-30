@@ -810,6 +810,43 @@ export default function AdminPage() {
     }
   };
 
+  const handleShareLeaderboard = async () => {
+    if (!leaderboardData || !selectedQuiz) return;
+    
+    try {
+      // Prepare the data for sharing
+      const shareData = {
+        quizId: selectedQuiz,
+        leaderboardData: {
+          entries: leaderboardData.entries,
+          stats: leaderboardData.stats,
+          actualCount: leaderboardData.actualCount,
+          evaluatedAt: leaderboardData.evaluatedAt
+        }
+      };
+      
+      const res = await fetch('/api/leaderboard/share', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify(shareData)
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(`✅ Leaderboard shared successfully! Users can now view results in the waiting room.`);
+        setShowShareModal(false);
+      } else {
+        const errorData = await res.json();
+        setStatus(`❌ Failed to share leaderboard: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('❌ Error sharing leaderboard');
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
@@ -1696,7 +1733,7 @@ export default function AdminPage() {
                     >
                       {leaderboardLoading ? 'Loading...' : 'Load Leaderboard'}
                     </button>
-                    {leaderboardData && leaderboardData.entries && leaderboardData.entries.length > 0 && (
+                    {leaderboardData  && leaderboardData.entries.length > 0 && (
                       <button
                         className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
                         onClick={() => setShowShareModal(true)}
@@ -1869,19 +1906,9 @@ export default function AdminPage() {
                           <div className="text-center">
                             <button
                               className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:from-blue-600 hover:to-indigo-600 transition"
-                              onClick={() => {
-                                if (shareTableRef.current) {
-                                  const range = document.createRange();
-                                  range.selectNode(shareTableRef.current);
-                                  window.getSelection().removeAllRanges();
-                                  window.getSelection().addRange(range);
-                                  document.execCommand('copy');
-                                  window.getSelection().removeAllRanges();
-                                  alert('Leaderboard copied to clipboard!');
-                                }
-                              }}
+                              onClick={handleShareLeaderboard}
                             >
-                              Copy Table
+                              Share to Users
                             </button>
                           </div>
                         </div>

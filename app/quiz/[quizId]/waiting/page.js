@@ -16,6 +16,8 @@ export default function QuizWaitingPage() {
   const [userId, setUserId] = useState('');
   const [userStats, setUserStats] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
+  const [sharedLeaderboard, setSharedLeaderboard] = useState(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   useEffect(() => {
     // Get user ID from cookies
@@ -47,13 +49,13 @@ export default function QuizWaitingPage() {
       try {
         answers = JSON.parse(storedAnswers1);
       } catch (e) {
-        console.error('Error parsing answers from localStorage:', e);
+        // console.error('Error parsing answers from localStorage:', e);
       }
     } else if (storedAnswers2) {
       try {
         answers = JSON.parse(storedAnswers2);
       } catch (e) {
-        console.error('Error parsing answers from localStorage:', e);
+        // console.error('Error parsing answers from localStorage:', e);
       }
     }
     
@@ -117,12 +119,59 @@ export default function QuizWaitingPage() {
             }
           }
         } catch (error) {
-          console.error('Error fetching answers from server:', error);
+          // console.error('Error fetching answers from server:', error);
         }
       };
       
       fetchAnswersFromServer();
     }
+
+    // Fetch shared leaderboard data
+    const fetchSharedLeaderboard = async () => {
+      if (!quizId) return;
+      
+      try {
+        const res = await fetch(`/api/leaderboard/share?quizId=${quizId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.leaderboardData) {
+            setSharedLeaderboard(data.leaderboardData);
+            // console.log('Shared leaderboard loaded successfully');
+          }
+        } else if (res.status === 404) {
+          // No shared leaderboard yet, this is normal
+          // console.log('No shared leaderboard available yet for quiz:', quizId);
+        } else {
+          // console.error('Error fetching shared leaderboard:', res.status);
+        }
+      } catch (error) {
+        // console.error('Error fetching shared leaderboard:', error);
+      }
+    };
+
+    // Fetch leaderboard immediately
+    fetchSharedLeaderboard();
+    
+    // Retry fetching leaderboard every 10 seconds for the first 2 minutes, then every 30 seconds
+    let retryCount = 0;
+    const maxQuickRetries = 12; // 2 minutes with 10-second intervals
+    
+    const leaderboardInterval = setInterval(() => {
+      retryCount++;
+      if (retryCount <= maxQuickRetries) {
+        // Quick retries every 10 seconds for first 2 minutes
+        fetchSharedLeaderboard();
+      } else {
+        // Slower retries every 30 seconds after 2 minutes
+        if ((retryCount - maxQuickRetries) % 3 === 0) {
+          fetchSharedLeaderboard();
+        }
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => {
+      clearInterval(leaderboardInterval);
+    };
   }, [quizId]);
 
   // Instagram Icon Component
@@ -336,6 +385,109 @@ export default function QuizWaitingPage() {
                   Back to Home
                 </button>
               </div>
+
+              {/* Shared Leaderboard Section */}
+              {sharedLeaderboard && (
+                <div className="bg-gradient-to-r from-green-500/10 to-blue-500/10 rounded-xl p-6 mb-6 border border-green-200/30">
+                  <h2 className="text-xl font-bold text-[#14134c] mb-4 text-center">
+                    🏆 Final Results - Top {sharedLeaderboard.actualCount} Participants
+                  </h2>
+                  
+                  {/* Leaderboard Stats */}
+                  {sharedLeaderboard.stats && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                      <div className="text-center p-3 bg-white/50 rounded-lg">
+                        <div className="text-lg font-bold text-[#14134c]">
+                          {sharedLeaderboard.stats.totalParticipants}
+                        </div>
+                        <div className="text-sm text-[#14134c]/70">Participants</div>
+                      </div>
+                      <div className="text-center p-3 bg-white/50 rounded-lg">
+                        <div className="text-lg font-bold text-[#14134c]">
+                          {sharedLeaderboard.stats.averageScore?.toFixed(1) || 'N/A'}
+                        </div>
+                        <div className="text-sm text-[#14134c]/70">Avg Score</div>
+                      </div>
+                      <div className="text-center p-3 bg-white/50 rounded-lg">
+                        <div className="text-lg font-bold text-[#14134c]">
+                          {sharedLeaderboard.stats.highestScore || 'N/A'}
+                        </div>
+                        <div className="text-sm text-[#14134c]/70">Highest Score</div>
+                      </div>
+                      <div className="text-center p-3 bg-white/50 rounded-lg">
+                        <div className="text-lg font-bold text-[#14134c]">
+                          {new Date(sharedLeaderboard.evaluatedAt).toLocaleDateString()}
+                        </div>
+                        <div className="text-sm text-[#14134c]/70">Evaluated</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Leaderboard Table */}
+                  <div className="bg-white/80 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-[#14134c]/10">
+                            <th className="px-3 py-2 text-left text-sm font-semibold text-[#14134c]">Rank</th>
+                            <th className="px-3 py-2 text-left text-sm font-semibold text-[#14134c]">Participant</th>
+                            <th className="px-3 py-2 text-center text-sm font-semibold text-[#14134c]">Score</th>
+                            <th className="px-3 py-2 text-center text-sm font-semibold text-[#14134c]">Correct</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sharedLeaderboard.entries.map((entry, index) => (
+                            <tr key={entry.userId} className={`border-b border-[#14134c]/10 ${index < 3 ? 'bg-yellow-100/50' : ''}`}>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center">
+                                  {index === 0 && <span className="text-xl mr-1">🥇</span>}
+                                  {index === 1 && <span className="text-xl mr-1">🥈</span>}
+                                  {index === 2 && <span className="text-xl mr-1">🥉</span>}
+                                  <span className={`font-semibold ${index < 3 ? 'text-yellow-600' : 'text-[#14134c]'}`}>
+                                    #{entry.rank}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div>
+                                  <div className="font-semibold text-[#14134c]">{entry.displayName}</div>
+                                  <div className="text-xs text-[#14134c]/60">#{entry.uniqueId}</div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="font-bold text-lg text-blue-600">{entry.score}</span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-[#14134c]/80">{entry.correctAnswers}/{entry.totalQuestions}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Leaderboard Loading/Status Section */}
+              {!sharedLeaderboard && (
+                <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-xl p-6 mb-6 border border-blue-200/30">
+                  <div className="text-center">
+                    <div className="text-4xl mb-4">🏆</div>
+                    <h3 className="text-lg font-semibold text-[#14134c] mb-2">
+                      Waiting for Final Results
+                    </h3>
+                    <p className="text-[#14134c]/70 text-sm mb-4">
+                      The leaderboard will appear here once the admin shares the final results.
+                    </p>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
