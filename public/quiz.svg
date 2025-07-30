@@ -1,0 +1,15 @@
+<!-- public/quiz.svg -->
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="32" cy="32" r="30" fill="url(#paint0_radial)" stroke="#FFD700" stroke-width="4"/>
+  <path d="M32 44a3 3 0 100 6 3 3 0 000-6zm0-28c-6.627 0-12 4.477-12 10h6c0-2.21 2.686-4 6-4s6 1.79 6 4c0 2.21-2.686 4-6 4v6h4v-2.126c4.627-1.165 8-4.477 8-7.874 0-5.523-5.373-10-12-10z" fill="url(#paint1_linear)"/>
+  <defs>
+    <radialGradient id="paint0_radial" cx="0" cy="0" r="1" gradientTransform="rotate(90 0 32) scale(32)"  >
+      <stop stop-color="#FFEE58"/>
+      <stop offset="1" stop-color="#FF7043"/>
+    </radialGradient>
+    <linearGradient id="paint1_linear" x1="20" y1="32" x2="44" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#42A5F5"/>
+      <stop offset="1" stop-color="#AB47BC"/>
+    </linearGradient>
+  </defs>
+</svg>
