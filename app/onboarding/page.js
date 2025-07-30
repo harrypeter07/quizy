@@ -215,7 +215,7 @@ export default function Onboarding() {
                   className={`w-full px-4 py-4 border-2 rounded-xl focus:ring-2 focus:ring-[#f8e0a0] focus:border-[#f8e0a0] transition-all duration-200 text-lg ${
                     errors.displayName ? 'border-red-300' : 'border-[#14134c]/20'
                   }`}
-                  placeholder="Enter your full name (e.g., John Smith)"
+                  placeholder="Enter your full name."
                   value={formData.displayName}
                   onChange={e => handleInputChange('displayName', e.target.value)}
                 />
