@@ -192,6 +192,8 @@ export default function AdminPage() {
           if (res.ok) {
             const data = await res.json();
             setLeaderboardData(data);
+          } else if (res.status === 404) {
+            // Do not clear leaderboardData, just ignore
           } else {
             setLeaderboardData(null);
           }
@@ -1719,6 +1721,8 @@ export default function AdminPage() {
                           if (res.ok) {
                             const data = await res.json();
                             setLeaderboardData(data);
+                          } else if (res.status === 404) {
+                            // Do not clear leaderboardData, just ignore
                           } else {
                             setLeaderboardData(null);
                           }
