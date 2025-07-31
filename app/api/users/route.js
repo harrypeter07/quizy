@@ -1,5 +1,6 @@
 import clientPromise from '@/lib/db.js';
 import { z } from 'zod';
+import { v4 as uuidv4 } from 'uuid';
 
 const userSchema = z.object({
   userId: z.string().min(1),
@@ -28,9 +29,12 @@ export async function POST(req) {
       }), { status: 409 });
     }
     
+    // Generate a unique userId if not provided
+    const userId = userData.userId || uuidv4();
     // Store user data
     const userToStore = {
       ...userData,
+      userId,
       displayName: userData.displayName.trim(),
       quizId: userData.quizId,
       createdAt: userData.createdAt || new Date().toISOString(),
@@ -38,14 +42,15 @@ export async function POST(req) {
     };
     
     await db.collection('users').updateOne(
-      { userId: userData.userId },
+      { userId: userId },
       { $set: userToStore },
       { upsert: true }
     );
     
     return new Response(JSON.stringify({ 
       status: 'ok',
-      message: 'User created successfully'
+      message: 'User created successfully',
+      userId // Return the userId to the client
     }), { status: 200 });
     
   } catch (error) {
