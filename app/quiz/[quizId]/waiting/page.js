@@ -366,15 +366,17 @@ export default function QuizWaitingPage() {
               )}
 
               {/* Status Message */}
-              <div className="text-center p-6 bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-200 rounded-xl">
-                <div className="flex items-center justify-center space-x-3 mb-3">
-                  <div className="w-5 h-5 animate-spin rounded-full border-2 border-green-500/30 border-t-green-500"></div>
-                  <span className="text-green-700 font-semibold text-lg">Processing Results</span>
+              {!sharedLeaderboard && (
+                <div className="text-center p-6 bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-200 rounded-xl">
+                  <div className="flex items-center justify-center space-x-3 mb-3">
+                    <div className="w-5 h-5 animate-spin rounded-full border-2 border-green-500/30 border-t-green-500"></div>
+                    <span className="text-green-700 font-semibold text-lg">Processing Results</span>
+                  </div>
+                  <p className="text-green-700 text-sm">
+                    Please wait while the results are being prepared.
+                  </p>
                 </div>
-                <p className="text-green-700 text-sm">
-                  Please wait while the results are being prepared.
-                </p>
-              </div>
+              )}
 
               {/* Back to Home Button */}
               <div className="text-center">

@@ -1924,6 +1924,21 @@ export default function AdminPage() {
                     </p>
                   </div>
                 )}
+                {leaderboardData && (
+                  <button
+                    className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-900 transition"
+                    style={{ marginLeft: '8px' }}
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(JSON.stringify(leaderboardData, null, 2));
+                      } catch (e) {
+                        alert('Failed to copy leaderboard data.');
+                      }
+                    }}
+                  >
+                    Copy Leaderboard JSON
+                  </button>
+                )}
               </div>
             )}
 
