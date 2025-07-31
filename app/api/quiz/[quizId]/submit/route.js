@@ -1,5 +1,6 @@
 import clientPromise from '@/lib/db.js';
 import { z } from 'zod';
+import PauseManager from '@/lib/pauseManager.js';
 
 const submissionSchema = z.object({
   userId: z.string().min(1),
@@ -30,8 +31,8 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Quiz not found' }), { status: 404 });
     }
     
-    // Check if THIS specific quiz is active
-    if (!quizDoc.active || quizDoc.quizId !== quizId) {
+    // Check if quiz is active
+    if (!quizDoc.active) {
       return new Response(JSON.stringify({ error: 'This quiz is not active' }), { status: 400 });
     }
 
@@ -39,6 +40,22 @@ export async function POST(req) {
     const questionIndex = questions.findIndex(q => q.id === questionId);
     if (questionIndex === -1) {
       return new Response(JSON.stringify({ error: 'Question not found' }), { status: 404 });
+    }
+
+    const questionNumber = questionIndex + 1; // Convert to 1-indexed
+    
+    // Enhanced pause point validation using PauseManager
+    const validationResult = PauseManager.canUserAnswerQuestion(quizId, userId, questionNumber);
+    
+    if (!validationResult.allowed) {
+      return new Response(JSON.stringify({ 
+        error: validationResult.reason,
+        isPaused: true,
+        pausePoint: validationResult.pausePoint,
+        nextPausePoint: validationResult.nextPausePoint,
+        userProgress: validationResult.userProgress,
+        allowedUpTo: validationResult.allowedUpTo
+      }), { status: 400 });
     }
 
     // Check if answer already exists for this user and question
@@ -62,10 +79,14 @@ export async function POST(req) {
         }
       );
       
+      // Track user progress after successful answer
+      PauseManager.trackUserProgress(quizId, userId, questionNumber);
+      
       return new Response(JSON.stringify({ 
         status: 'updated', 
         serverTimestamp,
-        message: 'Answer updated successfully'
+        message: 'Answer updated successfully',
+        userProgress: PauseManager.getUserProgress(quizId, userId)
       }), { status: 200 });
     }
 
@@ -81,10 +102,15 @@ export async function POST(req) {
     };
     
     const result = await answers.insertOne(answerDoc);
+    
+    // Track user progress after successful answer
+    PauseManager.trackUserProgress(quizId, userId, questionNumber);
+    
     return new Response(JSON.stringify({ 
       status: 'ok', 
       serverTimestamp,
-      insertedId: result.insertedId 
+      insertedId: result.insertedId,
+      userProgress: PauseManager.getUserProgress(quizId, userId)
     }), { status: 201 });
 
   } catch (err) {

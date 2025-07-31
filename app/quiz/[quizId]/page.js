@@ -22,6 +22,8 @@ export default function QuizPage() {
   const [clickedOptions, setClickedOptions] = useState(new Set()); // Prevent multiple clicks
   const [quizInfo, setQuizInfo] = useState(null);
   const [userId, setUserId] = useState('');
+  const [isPaused, setIsPaused] = useState(false);
+  const [pauseMessage, setPauseMessage] = useState('');
   const timerRef = useRef();
   const questionStart = useRef(Date.now());
 
@@ -39,7 +41,7 @@ export default function QuizPage() {
     setUserId(id);
   }, [quizId]);
 
-  // Check for quiz restart and stop status
+  // Check for quiz restart, stop status, and pause status
   useEffect(() => {
     const checkQuizStatus = async () => {
       try {
@@ -74,6 +76,8 @@ export default function QuizPage() {
               setFeedback('');
               setResponseTime(null);
               setSubmitting(false);
+              setIsPaused(false);
+              setPauseMessage('');
               
               // Clear local storage for this quiz
               localStorage.removeItem(`answers_${quizId}`);
@@ -97,6 +101,51 @@ export default function QuizPage() {
     return () => clearInterval(interval);
   }, [quizId, router]);
 
+  // Check for pause status at current question
+  useEffect(() => {
+    const checkPauseStatus = async () => {
+      if (questions.length === 0) return;
+      
+      try {
+        const res = await fetch(`/api/quiz/${quizId}/status?question=${current + 1}`);
+        if (res.ok) {
+          const statusData = await res.json();
+          const wasPaused = isPaused;
+          setIsPaused(statusData.isPaused);
+          
+          if (statusData.isPaused) {
+            setPauseMessage(`Quiz paused at question ${current + 1}. Waiting for admin to resume...`);
+            // Clear timer when paused
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+            }
+            // Prevent any further interaction
+            setSubmitting(true);
+          } else {
+            // Only clear pause message if we were previously paused
+            if (wasPaused) {
+              setPauseMessage('');
+              setSubmitting(false);
+              // Resume timer only if it was actually paused
+              if (timer === 0) {
+                setTimer(QUESTION_TIME);
+                questionStart.current = Date.now();
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking pause status:', error);
+      }
+    };
+
+    // Check pause status every 2 seconds when quiz is active (more frequent for better responsiveness)
+    const interval = setInterval(checkPauseStatus, 2000);
+    checkPauseStatus(); // Check immediately
+
+    return () => clearInterval(interval);
+  }, [quizId, current, questions.length, timer, submitting, isPaused]);
+
   // Set start time when user begins quiz
   useEffect(() => {
     if (questions.length > 0 && current === 0) {
@@ -104,9 +153,41 @@ export default function QuizPage() {
     }
   }, [questions.length, current, quizId]);
 
-  // Handle answer selection
+  // Enhanced answer validation before submission
+  const validateAnswerSubmission = useCallback(async (questionNumber) => {
+    try {
+      const userId = Cookies.get('userId');
+      const res = await fetch(`/api/quiz/${quizId}/status?question=${questionNumber}`);
+      if (res.ok) {
+        const statusData = await res.json();
+        return {
+          canAnswer: !statusData.isPaused,
+          isPaused: statusData.isPaused,
+          pausePoint: statusData.pausePoint,
+          nextPausePoint: statusData.nextPausePoint,
+          userProgress: statusData.userProgress
+        };
+      }
+    } catch (error) {
+      console.error('Error validating answer submission:', error);
+    }
+    return { canAnswer: true, isPaused: false };
+  }, [quizId]);
+
+  // Handle answer selection with enhanced validation
   const handleAnswer = useCallback(async (optionIdx, auto = false) => {
-    if (submitting) return;
+    if (submitting || isPaused) {
+      console.log('Answer blocked: submitting=', submitting, 'isPaused=', isPaused);
+      return;
+    }
+    
+    // Validate before allowing answer
+    const validation = await validateAnswerSubmission(current + 1);
+    if (!validation.canAnswer) {
+      setPauseMessage(`Cannot answer question ${current + 1}. Quiz is paused at question ${validation.pausePoint || validation.nextPausePoint}.`);
+      setIsPaused(true);
+      return;
+    }
     
     // Immediately prevent any further interaction
     setSubmitting(true);
@@ -135,14 +216,26 @@ export default function QuizPage() {
     setResponseTime(responseTimeMs);
     setFeedback(auto ? 'Time up! Answer recorded.' : 'Answer recorded!');
 
-    // Submit answer to backend
+    // Submit answer to backend with enhanced error handling
     try {
       const userId = Cookies.get('userId');
-      await fetch(`/api/quiz/${quizId}/submit`, {
+      const submitRes = await fetch(`/api/quiz/${quizId}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...answerData, userId, quizId })
       });
+      
+      if (!submitRes.ok) {
+        const errorData = await submitRes.json();
+        if (errorData.isPaused) {
+          // Quiz was paused during submission
+          setPauseMessage(`Quiz paused at question ${errorData.pausePoint || current + 1}. Cannot proceed.`);
+          setIsPaused(true);
+          setSubmitting(false);
+          return;
+        }
+        console.error('Answer submission failed:', errorData);
+      }
     } catch (error) {
       console.error('Error submitting answer:', error);
     }
@@ -161,11 +254,17 @@ export default function QuizPage() {
       setClickedOptions(new Set());
       setCurrent(c => c + 1);
     }, 1200);
-  }, [submitting, questions, current, quizId, router, userAnswers]);
+  }, [submitting, questions, current, quizId, router, userAnswers, isPaused, validateAnswerSubmission]);
 
   // Timer logic - Use a more robust timer that continues even when page is not active
   useEffect(() => {
-    if (questions.length === 0) return;
+    if (questions.length === 0 || isPaused) {
+      // Clear timer when paused
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      return;
+    }
     
     setTimer(QUESTION_TIME);
     questionStart.current = Date.now();
@@ -177,7 +276,10 @@ export default function QuizPage() {
       setTimer(t => {
         if (t <= 1) {
           clearInterval(timerRef.current);
-          handleAnswer(null, true);
+          // Only auto-submit if not paused
+          if (!isPaused) {
+            handleAnswer(null, true);
+          }
           return 0;
         }
         return t - 1;
@@ -189,7 +291,7 @@ export default function QuizPage() {
         clearInterval(timerRef.current);
       }
     };
-  }, [current, questions.length, handleAnswer, quizId]);
+  }, [current, questions.length, handleAnswer, quizId, isPaused]);
 
   // Persist timer state when page becomes hidden/inactive
   useEffect(() => {
@@ -199,20 +301,28 @@ export default function QuizPage() {
         localStorage.setItem(`timer_state_${quizId}_${current}`, JSON.stringify({
           timer: timer,
           questionStart: questionStart.current,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          isPaused: isPaused
         }));
       } else {
         // Page is visible again, restore timer state if needed
         const storedState = localStorage.getItem(`timer_state_${quizId}_${current}`);
         if (storedState) {
           const state = JSON.parse(storedState);
+          
+          // Don't restore timer if quiz was paused
+          if (state.isPaused) {
+            localStorage.removeItem(`timer_state_${quizId}_${current}`);
+            return;
+          }
+          
           const elapsed = Date.now() - state.timestamp;
           const newTimer = Math.max(0, state.timer - Math.floor(elapsed / 1000));
           
-          if (newTimer <= 0) {
-            // Time expired while away, auto-submit
+          if (newTimer <= 0 && !isPaused) {
+            // Time expired while away, auto-submit only if not paused
             handleAnswer(null, true);
-          } else {
+          } else if (!isPaused) {
             setTimer(newTimer);
           }
           
@@ -224,11 +334,14 @@ export default function QuizPage() {
 
     // Also handle page unload to save timer state
     const handleBeforeUnload = () => {
-      localStorage.setItem(`timer_state_${quizId}_${current}`, JSON.stringify({
-        timer: timer,
-        questionStart: questionStart.current,
-        timestamp: Date.now()
-      }));
+      if (!isPaused) {
+        localStorage.setItem(`timer_state_${quizId}_${current}`, JSON.stringify({
+          timer: timer,
+          questionStart: questionStart.current,
+          timestamp: Date.now(),
+          isPaused: isPaused
+        }));
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -238,7 +351,7 @@ export default function QuizPage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [timer, current, quizId, handleAnswer]);
+  }, [timer, current, quizId, handleAnswer, isPaused]);
 
   if (!questions.length) {
     return <LoadingSpinner />;
@@ -289,11 +402,12 @@ export default function QuizPage() {
             </div>
             {/* Timer */}
             <div className={`text-2xl sm:text-3xl font-mono font-bold px-4 py-2 rounded-lg transition-all duration-300 ${
+              isPaused ? 'bg-yellow-500 text-white animate-pulse' :
               timer <= 5 ? 'bg-red-500 text-white animate-pulse' : 
               timer <= 10 ? 'bg-yellow-500 text-white' : 
               'bg-[#14134c] text-white'
             }`}>
-              {timer}s
+              {isPaused ? '⏸️' : `${timer}s`}
             </div>
           </div>
 
@@ -310,13 +424,13 @@ export default function QuizPage() {
               <button
                 key={idx}
                 onClick={() => handleAnswer(idx)}
-                disabled={submitting || clickedOptions.has(idx)}
+                disabled={submitting || clickedOptions.has(idx) || isPaused}
                 className={`relative w-full py-4 px-4 rounded-xl border-2 text-base sm:text-lg font-medium shadow-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
                   ${selected === idx 
                     ? 'bg-gradient-to-r from-[#14134c] to-[#f8e0a0] text-white border-[#14134c] shadow-xl' 
                     : 'bg-white/80 text-[#14134c] border-gray-200 hover:bg-[#f8e0a0]/20 hover:border-[#f8e0a0]'
                   }
-                  ${submitting || clickedOptions.has(idx) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
+                  ${submitting || clickedOptions.has(idx) || isPaused ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
                   ${clickedOptions.has(idx) ? 'ring-2 ring-[#14134c] ring-opacity-50' : ''}
                 `}
               >
@@ -342,6 +456,21 @@ export default function QuizPage() {
                 feedback.includes('restarted') ? 'text-purple-700' : 'text-green-700'
               }`}>
                 {feedback.includes('restarted') && '🔄 '}{feedback}
+              </div>
+            </div>
+          )}
+
+          {/* Pause Message */}
+          {isPaused && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-200 rounded-xl text-center">
+              <div className="text-yellow-700 font-semibold text-lg mb-2">
+                ⏸️ Quiz Paused
+              </div>
+              <div className="text-yellow-600 text-base">
+                {pauseMessage}
+              </div>
+              <div className="text-yellow-500 text-sm mt-2">
+                Please wait for the admin to resume the quiz...
               </div>
             </div>
           )}

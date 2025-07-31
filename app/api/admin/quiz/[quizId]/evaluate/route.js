@@ -1,6 +1,7 @@
 import clientPromise from '@/lib/db.js';
 import { batchEvaluateUsers, calculateEvaluationStats } from '@/lib/scoring.js';
 import { z } from 'zod';
+import PauseManager from '@/lib/pauseManager.js';
 
 const adminToken = process.env.ADMIN_TOKEN;
 
@@ -170,27 +171,47 @@ export async function POST(req, { params }) {
       }
     });
     
-    // Automatically stop the quiz after evaluation
-    await db.collection('quizzes').updateOne(
-      { quizId },
-      { 
-        $set: { 
-          active: false, 
-          stoppedAt: Date.now(),
-          evaluatedAt: Date.now(),
-          evaluationCompleted: true
-        }
-      }
-    );
+    // Check if there are pause points set - if so, don't stop the quiz
+    const pausePoints = PauseManager.getPausePoints(quizId);
+    const shouldStopQuiz = pausePoints.length === 0;
     
-    // console.log(`[evaluate] Quiz ${quizId} automatically stopped after evaluation`);
+    if (shouldStopQuiz) {
+      // Only stop the quiz if no pause points are set (normal evaluation)
+      await db.collection('quizzes').updateOne(
+        { quizId },
+        { 
+          $set: { 
+            active: false, 
+            stoppedAt: Date.now(),
+            evaluatedAt: Date.now(),
+            evaluationCompleted: true
+          }
+        }
+      );
+      console.log(`[evaluate] Quiz ${quizId} automatically stopped after evaluation (no pause points)`);
+    } else {
+      // Keep quiz active if pause points are set (pause evaluation)
+      await db.collection('quizzes').updateOne(
+        { quizId },
+        { 
+          $set: { 
+            evaluatedAt: Date.now(),
+            evaluationCompleted: true,
+            // Keep active: true to allow continuation after resume
+            active: true
+          }
+        }
+      );
+      console.log(`[evaluate] Quiz ${quizId} kept active after evaluation (pause points detected)`);
+    }
     
     return new Response(JSON.stringify({ 
       status: 'ok', 
       leaderboard: leaderboardEntries,
       stats,
       totalEvaluated: evaluationResults.length,
-      quizStopped: true
+      quizStopped: shouldStopQuiz,
+      pauseEvaluation: !shouldStopQuiz
     }), { status: 200 });
     
   } catch (err) {

@@ -36,6 +36,10 @@ export default function AdminPage() {
   const [uploadSuccess, setUploadSuccess] = useState(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const shareTableRef = useRef(null);
+  const [pausePoints, setPausePoints] = useState([]);
+  const [questionProgress, setQuestionProgress] = useState([]);
+  const [showPauseControls, setShowPauseControls] = useState(false);
+  const [pauseLoading, setPauseLoading] = useState(false);
 
   // Calculate isQuizActive early to avoid initialization errors
   const isQuizActive = dashboardData?.quizStats.find(q => q.id === selectedQuiz)?.active;
@@ -229,6 +233,24 @@ export default function AdminPage() {
       loadQuestionResponses();
     }
   }, [activeTab, selectedQuiz, adminToken]);
+
+  // Load pause points and question progress when quiz changes
+  useEffect(() => {
+    if (selectedQuiz && adminToken) {
+      fetchPausePoints();
+    }
+  }, [selectedQuiz, adminToken]);
+
+  // Auto-refresh pause points every 10 seconds when quiz is active
+  useEffect(() => {
+    if (selectedQuiz && adminToken && isQuizActive) {
+      const interval = setInterval(() => {
+        fetchPausePoints();
+      }, 10000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [selectedQuiz, adminToken, isQuizActive]);
 
   // Fetch custom question sets on mount
   useEffect(() => {
@@ -847,6 +869,120 @@ export default function AdminPage() {
     }
   };
 
+  const fetchPausePoints = async () => {
+    if (!selectedQuiz || !adminToken) return;
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/pause-points`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setPausePoints(data.pausePoints || []);
+        setQuestionProgress(data.questionProgress || []);
+      }
+    } catch (error) {
+      console.error('Error fetching pause points:', error);
+    }
+  };
+
+  const handleSetPausePoints = async (newPausePoints) => {
+    if (!selectedQuiz || !adminToken) return;
+    
+    setPauseLoading(true);
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/pause-points`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ pausePoints: newPausePoints })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setPausePoints(newPausePoints);
+        setStatus(`✅ Pause points set: ${newPausePoints.join(', ')}`);
+      } else {
+        const errorData = await res.json();
+        setStatus(`❌ Failed to set pause points: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('❌ Error setting pause points');
+    } finally {
+      setPauseLoading(false);
+    }
+  };
+
+  const handleResumeQuiz = async () => {
+    if (!selectedQuiz || !adminToken) return;
+    
+    setPauseLoading(true);
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/resume`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setPausePoints([]);
+        setStatus('✅ Quiz resumed successfully!');
+      } else {
+        const errorData = await res.json();
+        setStatus(`❌ Failed to resume quiz: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('❌ Error resuming quiz');
+    } finally {
+      setPauseLoading(false);
+    }
+  };
+
+  const handleClearPausePoints = async () => {
+    if (!selectedQuiz || !adminToken) return;
+    
+    setPauseLoading(true);
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/pause-points`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        setPausePoints([]);
+        setStatus('✅ Pause points cleared');
+      } else {
+        const errorData = await res.json();
+        setStatus(`❌ Failed to clear pause points: ${errorData.error}`);
+      }
+    } catch (error) {
+      setStatus('❌ Error clearing pause points');
+    } finally {
+      setPauseLoading(false);
+    }
+  };
+
+  const fetchUserProgress = async () => {
+    if (!selectedQuiz || !adminToken) return;
+    
+    try {
+      const res = await fetch(`/api/admin/quiz/${selectedQuiz}/user-progress`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching user progress:', error);
+    }
+    return null;
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
@@ -934,6 +1070,106 @@ export default function AdminPage() {
                         • Use during or after quiz
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pause Control Section */}
+              <div className="bg-purple-500/20 rounded-lg p-3 border border-purple-400/30">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold text-purple-100">⏸️ Pause Control</h4>
+                  <button
+                    onClick={() => setShowPauseControls(!showPauseControls)}
+                    className="text-purple-200 hover:text-purple-100 text-sm"
+                  >
+                    {showPauseControls ? 'Hide' : 'Show'} Controls
+                  </button>
+                </div>
+                {showPauseControls && (
+                  <div className="space-y-3">
+                    {/* Visual Progress Tracker */}
+                    <div className="bg-purple-500/10 rounded p-2 border border-purple-400/20">
+                      <div className="text-xs text-purple-200 mb-2 font-medium">Question Progress Tracker:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {questionProgress.map((question) => (
+                          <div
+                            key={question.questionNumber}
+                            className={`relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                              question.isPausePoint 
+                                ? 'bg-purple-500 text-white border-purple-300 shadow-lg animate-pulse' 
+                                : question.responseCount > 0 
+                                  ? 'bg-green-500 text-white border-green-300' 
+                                  : 'bg-gray-300 text-gray-600 border-gray-400'
+                            }`}
+                            title={`Q${question.questionNumber}: ${question.responseCount} responses${question.isPausePoint ? ' (PAUSE POINT)' : ''}`}
+                          >
+                            {question.questionNumber}
+                            {question.isPausePoint && (
+                              <div className="absolute -top-1 -right-1 text-xs">⏸️</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pause Point Selection */}
+                    <div className="bg-purple-500/10 rounded p-2 border border-purple-400/20">
+                      <div className="text-xs text-purple-200 mb-2 font-medium">Set Pause Points:</div>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {questionProgress.map((question) => (
+                          <button
+                            key={question.questionNumber}
+                            onClick={() => {
+                              const newPausePoints = pausePoints.includes(question.questionNumber)
+                                ? pausePoints.filter(p => p !== question.questionNumber)
+                                : [...pausePoints, question.questionNumber].sort((a, b) => a - b);
+                              handleSetPausePoints(newPausePoints);
+                            }}
+                            disabled={pauseLoading}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              pausePoints.includes(question.questionNumber)
+                                ? 'bg-purple-600 text-white border border-purple-400'
+                                : 'bg-gray-600 text-gray-200 border border-gray-500 hover:bg-gray-500'
+                            } ${pauseLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            Q{question.questionNumber}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-xs text-purple-300">
+                        Selected: {pausePoints.length > 0 ? pausePoints.join(', ') : 'None'}
+                      </div>
+                    </div>
+
+                    {/* Pause Control Buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleResumeQuiz}
+                        disabled={pauseLoading || pausePoints.length === 0}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {pauseLoading ? '⏳' : '▶️'} Resume Quiz
+                      </button>
+                      <button
+                        onClick={handleClearPausePoints}
+                        disabled={pauseLoading || pausePoints.length === 0}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        🗑️ Clear All
+                      </button>
+                    </div>
+
+                    {/* Status Display */}
+                    {pausePoints.length > 0 && (
+                      <div className="bg-yellow-500/20 rounded p-2 border border-yellow-400/30">
+                        <div className="text-xs text-yellow-200 font-medium">
+                          ⚠️ Quiz will pause at questions: {pausePoints.join(', ')}
+                        </div>
+                        <div className="text-xs text-yellow-300 mt-1">
+                          Users will be stopped until you resume the quiz
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

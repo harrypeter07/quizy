@@ -72,7 +72,6 @@
   evaluationDetails: Object // Detailed evaluation info
 }
 ```
-
 #### 5. `validationReports` Collection
 ```javascript
 {
